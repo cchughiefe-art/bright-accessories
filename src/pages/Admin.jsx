@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import {
-  collection, getDocs, addDoc, updateDoc, doc, serverTimestamp, increment, query, orderBy, limit
+  collection, getDocs, addDoc, updateDoc, doc, serverTimestamp, increment
 } from "firebase/firestore";
 import { db } from "../firebase";
 
@@ -149,17 +149,23 @@ export default function Admin() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   const loadData = async () => {
     setLoading(true);
+    setError("");
     try {
       const [pSnap, oSnap] = await Promise.all([
-        getDocs(query(collection(db, "products"), orderBy("createdAt", "desc"))),
-        getDocs(query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(50))),
+        getDocs(collection(db, "products")),
+        getDocs(collection(db, "orders")),
       ]);
-      setProducts(pSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      setOrders(oSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      const prods = pSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const ords = oSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      ords.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      setProducts(prods);
+      setOrders(ords);
     } catch (e) {
+      setError("Failed to load data: " + e.message);
       console.error(e);
     }
     setLoading(false);
@@ -175,7 +181,7 @@ export default function Admin() {
     }
     setShowForm(false);
     setEditing(null);
-    loadData();
+    await loadData();
   };
 
   const handleOrderAction = async (order, action) => {
@@ -185,23 +191,30 @@ export default function Admin() {
         availableQuantity: increment(-order.quantity),
       });
     }
-    loadData();
+    await loadData();
   };
 
   if (!authed) return <LoginScreen onLogin={() => setAuthed(true)} />;
 
   const pendingOrders = orders.filter((o) => o.status === "pending");
+  const pastOrders = orders.filter((o) => o.status !== "pending");
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--light)" }}>
       <header style={{ background: "var(--dark)", padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <h1 style={{ color: "var(--gold)", fontSize: 20 }}>Bright Admin</h1>
-        <a href="/" style={{ color: "#aaa", fontSize: 13, textDecoration: "none" }}>Back to Store</a>
+        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          <button onClick={loadData} style={{ background: "transparent", border: "1px solid #555", color: "#aaa", borderRadius: 6, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}>
+            Refresh
+          </button>
+          <a href="/" style={{ color: "#aaa", fontSize: 13, textDecoration: "none" }}>Store</a>
+        </div>
       </header>
+
       <div style={{ display: "flex", background: "white", borderBottom: "1.5px solid var(--border)" }}>
         {[
           { id: "orders", label: `Orders${pendingOrders.length ? ` (${pendingOrders.length})` : ""}` },
-          { id: "products", label: "Products" },
+          { id: "products", label: `Products (${products.length})` },
         ].map((t) => (
           <button key={t.id} onClick={() => setTab(t.id)}
             style={{
@@ -212,16 +225,32 @@ export default function Admin() {
             }}>{t.label}</button>
         ))}
       </div>
+
       <div style={{ padding: 16 }}>
+        {error && (
+          <div style={{ background: "#FEE2E2", color: "var(--red)", padding: 14, borderRadius: 10, marginBottom: 16, fontSize: 13 }}>
+            {error}
+            <button onClick={loadData} style={{ marginLeft: 10, fontWeight: 700, background: "none", border: "none", color: "var(--red)", cursor: "pointer" }}>
+              Retry
+            </button>
+          </div>
+        )}
+
         {loading ? (
-          <div style={{ textAlign: "center", padding: 40 }}>
+          <div style={{ textAlign: "center", padding: 60 }}>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>⏳</div>
             <p style={{ color: "var(--gold)", fontWeight: 600 }}>Loading...</p>
           </div>
         ) : tab === "orders" ? (
           <>
-            <h2 style={{ marginBottom: 14, fontSize: 18 }}>Pending Orders ({pendingOrders.length})</h2>
+            <h2 style={{ marginBottom: 14, fontSize: 18 }}>
+              Pending Orders ({pendingOrders.length})
+            </h2>
             {pendingOrders.length === 0 ? (
-              <p style={{ color: "#888", textAlign: "center", padding: 40 }}>No pending orders</p>
+              <div style={{ textAlign: "center", padding: 40, color: "#888" }}>
+                <div style={{ fontSize: 32, marginBottom: 8 }}>📭</div>
+                <p>No pending orders</p>
+              </div>
             ) : (
               pendingOrders.map((o) => (
                 <div key={o.id} className="card" style={{ marginBottom: 14, padding: 16 }}>
@@ -232,37 +261,40 @@ export default function Admin() {
                     <div style={{ flex: 1 }}>
                       <p style={{ fontWeight: 700, fontSize: 15 }}>{o.productName}</p>
                       <p style={{ fontSize: 13, color: "#555" }}>Qty: {o.quantity} x {fmt(o.sellingPrice)}</p>
-                      <p style={{ color: "var(--gold)", fontWeight: 700 }}>Total: {fmt(o.total)}</p>
+                      <p style={{ color: "var(--gold)", fontWeight: 700, fontSize: 16 }}>Total: {fmt(o.total)}</p>
                     </div>
                   </div>
-                  <div style={{ fontSize: 13, color: "#444", lineHeight: 1.7, marginBottom: 14 }}>
-                    <p>Name: <strong>{o.customerName}</strong></p>
-                    <p>Phone: {o.customerPhone}</p>
-                    <p>Address: {o.deliveryAddress}</p>
-                    {o.notes && <p>Notes: {o.notes}</p>}
+                  <div style={{ background: "#f9f5f0", borderRadius: 8, padding: "10px 12px", fontSize: 13, color: "#444", lineHeight: 1.8, marginBottom: 14 }}>
+                    <p>👤 <strong>{o.customerName}</strong></p>
+                    <p>📞 {o.customerPhone}</p>
+                    <p>📍 {o.deliveryAddress}</p>
+                    {o.notes && <p>📝 {o.notes}</p>}
                   </div>
                   <div style={{ display: "flex", gap: 10 }}>
                     <button onClick={() => handleOrderAction(o, "cancelled")}
-                      style={{ flex: 1, padding: "9px 0", border: "1.5px solid var(--red)", background: "transparent",
+                      style={{ flex: 1, padding: "10px 0", border: "1.5px solid var(--red)", background: "transparent",
                         color: "var(--red)", borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: "pointer" }}>
                       Cancel
                     </button>
                     <button onClick={() => handleOrderAction(o, "successful")}
-                      style={{ flex: 2, padding: "9px 0", border: "none", background: "var(--green)",
+                      style={{ flex: 2, padding: "10px 0", border: "none", background: "var(--green)",
                         color: "white", borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: "pointer" }}>
-                      Mark Delivered
+                      ✓ Mark Delivered
                     </button>
                   </div>
                 </div>
               ))
             )}
-            {orders.filter(o => o.status !== "pending").length > 0 && (
+
+            {pastOrders.length > 0 && (
               <>
-                <h2 style={{ margin: "24px 0 12px", fontSize: 16, color: "#888" }}>Past Orders</h2>
-                {orders.filter(o => o.status !== "pending").map((o) => (
+                <h2 style={{ margin: "24px 0 12px", fontSize: 16, color: "#888" }}>
+                  Past Orders ({pastOrders.length})
+                </h2>
+                {pastOrders.map((o) => (
                   <div key={o.id} style={{ background: "white", borderRadius: 12, padding: 14, marginBottom: 10,
-                    opacity: 0.7, border: "1px solid var(--border)" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    border: "1px solid var(--border)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
                       <span style={{ fontSize: 14, fontWeight: 600 }}>{o.productName}</span>
                       <span style={{
                         fontSize: 12, fontWeight: 600, padding: "3px 10px", borderRadius: 20,
@@ -270,7 +302,8 @@ export default function Admin() {
                         color: o.status === "successful" ? "var(--green)" : "var(--red)"
                       }}>{o.status}</span>
                     </div>
-                    <p style={{ fontSize: 13, color: "#666", marginTop: 4 }}>{o.customerName} - {fmt(o.total)}</p>
+                    <p style={{ fontSize: 13, color: "#666" }}>{o.customerName} • {o.customerPhone}</p>
+                    <p style={{ fontSize: 13, color: "var(--gold)", fontWeight: 600 }}>{fmt(o.total)}</p>
                   </div>
                 ))}
               </>
@@ -283,30 +316,43 @@ export default function Admin() {
               <button className="btn-gold" style={{ padding: "10px 18px", fontSize: 14 }}
                 onClick={() => { setEditing(null); setShowForm(true); }}>+ Add</button>
             </div>
+
             {showForm && (
-              <div className="overlay" onClick={() => setShowForm(false)}>
+              <div className="overlay" onClick={() => { setShowForm(false); setEditing(null); }}>
                 <div style={{ width: "100%", maxWidth: 480, maxHeight: "90vh", overflowY: "auto" }}
                   onClick={(e) => e.stopPropagation()}>
-                  <ProductForm initial={editing} onSave={handleSaveProduct}
-                    onCancel={() => { setShowForm(false); setEditing(null); }} />
+                  <ProductForm
+                    initial={editing}
+                    onSave={handleSaveProduct}
+                    onCancel={() => { setShowForm(false); setEditing(null); }}
+                  />
                 </div>
               </div>
             )}
+
             {products.length === 0 ? (
-              <p style={{ textAlign: "center", color: "#888", padding: 40 }}>No products yet. Add your first product!</p>
+              <div style={{ textAlign: "center", color: "#888", padding: 40 }}>
+                <div style={{ fontSize: 32, marginBottom: 8 }}>📦</div>
+                <p>No products yet. Add your first product!</p>
+              </div>
             ) : (
               products.map((p) => (
-                <div key={p.id} className="card" style={{ marginBottom: 14, padding: 14, display: "flex", gap: 12, alignItems: "center" }}>
-                  {p.imageUrl && (
-                    <img src={p.imageUrl} alt="" style={{ width: 60, height: 60, objectFit: "cover", borderRadius: 8, flexShrink: 0 }} />
-                  )}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontWeight: 700, fontSize: 15 }}>{p.name}</p>
-                    <p style={{ fontSize: 13, color: "#555" }}>Sell: {fmt(p.sellingPrice)} - Stock: {p.availableQuantity}</p>
-                    <p style={{ fontSize: 12, color: "#999" }}>Cost: {fmt(p.costPrice)} - Delivery: {fmt(p.deliveryCost)}</p>
+                <div key={p.id} className="card" style={{ marginBottom: 14, padding: 14 }}>
+                  <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                    {p.imageUrl ? (
+                      <img src={p.imageUrl} alt="" style={{ width: 70, height: 70, objectFit: "cover", borderRadius: 8, flexShrink: 0 }} />
+                    ) : (
+                      <div style={{ width: 70, height: 70, background: "#f0ece8", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, flexShrink: 0 }}>📱</div>
+                    )}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontWeight: 700, fontSize: 15, marginBottom: 2 }}>{p.name}</p>
+                      <p style={{ fontSize: 13, color: "var(--gold)", fontWeight: 600 }}>{fmt(p.sellingPrice)}</p>
+                      <p style={{ fontSize: 12, color: "#777" }}>Stock: {p.availableQuantity} • Cost: {fmt(p.costPrice)}</p>
+                      {p.description && <p style={{ fontSize: 12, color: "#999", marginTop: 2 }}>{p.description}</p>}
+                    </div>
+                    <button className="btn-gold" style={{ fontSize: 13, padding: "8px 16px", flexShrink: 0 }}
+                      onClick={() => { setEditing(p); setShowForm(true); }}>Edit</button>
                   </div>
-                  <button className="btn-outline" style={{ fontSize: 13, padding: "8px 14px", flexShrink: 0 }}
-                    onClick={() => { setEditing(p); setShowForm(true); }}>Edit</button>
                 </div>
               ))
             )}
