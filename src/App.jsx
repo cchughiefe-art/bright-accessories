@@ -64,8 +64,7 @@ function OrderModal({ product, onClose }) {
           <h2 style={{ marginBottom: 8 }}>Order Placed!</h2>
           <p style={{ color: "#555", marginBottom: 4 }}>Thank you, <strong>{form.name}</strong>!</p>
           <p style={{ color: "#555", marginBottom: 20, fontSize: 14 }}>
-            We will contact you on <strong>{form.phone}</strong> to arrange delivery.<br />
-            <span style={{ color: "var(--gold)", fontWeight: 600 }}>Pay on Delivery</span>
+            We will contact you on <strong>{form.phone}</strong> to arrange delivery.
           </p>
           <button className="btn-gold" style={{ width: "100%" }} onClick={onClose}>Continue Shopping</button>
         </div>
@@ -121,7 +120,7 @@ function OrderModal({ product, onClose }) {
         <div style={{ display: "flex", gap: 10 }}>
           <button className="btn-outline" onClick={onClose} style={{ flex: 1 }}>Cancel</button>
           <button className="btn-gold" onClick={handleSubmit} disabled={loading || product.availableQuantity <= 0} style={{ flex: 2 }}>
-            {loading ? "Placing Order..." : `Order Now - ${fmt(total)}`}
+            {loading ? "Placing Order..." : "Order Now - " + fmt(total)}
           </button>
         </div>
       </div>
@@ -180,7 +179,7 @@ export default function App() {
                     <img src={product.imageUrl} alt={product.name}
                       style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
                   ) : (
-                    <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 40 }}>💍</div>
+                    <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 40 }}>📱</div>
                   )}
                   <div style={{ position: "absolute", top: 8, left: 8 }}>
                     <StockBadge qty={product.availableQuantity} />
@@ -208,7 +207,10 @@ export default function App() {
       </div>
       <footer style={{ textAlign: "center", padding: "30px 16px", color: "#999", fontSize: 12 }}>
         <p>All orders are Cash on Delivery</p>
-        <p style={{ marginTop: 4 }}>2026 Bright Accessories Nigeria</p><p style={{ marginTop: 8 }}><a href="/admin" style={{ color: "#555", fontSize: 11, textDecoration: "none" }}>Admin</a></p></p>
+        <p style={{ marginTop: 4 }}>2026 Bright Accessories Nigeria</p>
+        <p style={{ marginTop: 8 }}>
+          <a href="/admin" style={{ color: "#555", fontSize: 11, textDecoration: "none" }}>Admin</a>
+        </p>
       </footer>
       {selected && <OrderModal product={selected} onClose={() => setSelected(null)} />}
     </div>
