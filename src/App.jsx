@@ -208,7 +208,7 @@ export default function App() {
       </div>
       <footer style={{ textAlign: "center", padding: "30px 16px", color: "#999", fontSize: 12 }}>
         <p>All orders are Cash on Delivery</p>
-        <p style={{ marginTop: 4 }}>2026 Bright Accessories Nigeria</p>
+        <p style={{ marginTop: 4 }}>2026 Bright Accessories Nigeria</p><p style={{ marginTop: 8 }}><a href="/admin" style={{ color: "#555", fontSize: 11, textDecoration: "none" }}>Admin</a></p></p>
       </footer>
       {selected && <OrderModal product={selected} onClose={() => setSelected(null)} />}
     </div>
