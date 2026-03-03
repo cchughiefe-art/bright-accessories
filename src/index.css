@@ -1,0 +1,111 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --gold: #C9973A;
+  --gold-light: #F5E6C8;
+  --dark: #1A1A1A;
+  --mid: #3D3D3D;
+  --light: #F9F5F0;
+  --white: #FFFFFF;
+  --red: #D94040;
+  --green: #2E7D55;
+  --orange: #D97706;
+  --border: #E8DDD0;
+}
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--light);
+  color: var(--dark);
+  min-height: 100vh;
+}
+
+h1, h2, h3 { font-family: 'Playfair Display', serif; }
+
+button { cursor: pointer; font-family: 'DM Sans', sans-serif; }
+
+input, textarea, select {
+  font-family: 'DM Sans', sans-serif;
+  outline: none;
+}
+
+.badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+.badge-in { background: #D1FAE5; color: var(--green); }
+.badge-low { background: #FEF3C7; color: var(--orange); }
+.badge-out { background: #FEE2E2; color: var(--red); }
+
+.btn-gold {
+  background: var(--gold);
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 15px;
+  transition: background 0.2s, transform 0.1s;
+}
+.btn-gold:hover { background: #B5832E; }
+.btn-gold:active { transform: scale(0.98); }
+.btn-gold:disabled { background: #ccc; cursor: not-allowed; }
+
+.btn-outline {
+  background: transparent;
+  border: 1.5px solid var(--gold);
+  color: var(--gold);
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+.btn-outline:hover { background: var(--gold); color: white; }
+
+.overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.55);
+  z-index: 100;
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+}
+
+.modal {
+  background: white;
+  border-radius: 16px;
+  padding: 28px 24px;
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+}
+
+.input-field {
+  width: 100%;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 15px;
+  transition: border-color 0.2s;
+  background: white;
+}
+.input-field:focus { border-color: var(--gold); }
+
+.card {
+  background: white;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.07);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,0.12); }
+
+@media (max-width: 480px) {
+  .modal { padding: 20px 16px; }
+}
