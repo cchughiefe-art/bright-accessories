@@ -157,7 +157,7 @@ export default function App() {
         boxShadow: "0 2px 12px rgba(0,0,0,0.2)"
       }}>
         <h1 style={{ color: "var(--gold)", fontSize: 26, letterSpacing: 1 }}>Bright Accessories</h1>
-        <p style={{ color: "#aaa", fontSize: 12, letterSpacing: 0.5 }}>Quality Fashion Accessories - Pay on Delivery</p>
+        <p style={{ color: "#aaa", fontSize: 12, letterSpacing: 0.5 }}>Quality Phone Accessories - Pay on Delivery</p>
       </header>
       <div style={{ padding: "16px 16px 0" }}>
         <input className="input-field" placeholder="Search accessories..."
