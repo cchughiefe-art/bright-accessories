@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from "react";
 import {
-  collection, getDocs, addDoc, updateDoc, doc, serverTimestamp, increment
+  collection, getDocs, addDoc, updateDoc, doc, serverTimestamp, increment, query, orderBy, limit
 } from "firebase/firestore";
 import { db } from "../firebase";
 
 const fmt = (n) => `₦${Number(n || 0).toLocaleString("en-NG")}`;
-const IMGBB_KEY = import.meta.env.VITE_IMGBB_API_KEY;
+const IMGBB_KEY = "d025f246af80b099e6744a75bdfc8d30";
 const ADMIN_PASSWORD = "Brightaccess2026";
 
 const EMPTY_PRODUCT = {
@@ -38,36 +38,60 @@ function LoginScreen({ onLogin }) {
 function ProductForm({ initial, onSave, onCancel }) {
   const [form, setForm] = useState(initial || EMPTY_PRODUCT);
   const [imgFile, setImgFile] = useState(null);
+  const [preview, setPreview] = useState(initial?.imageUrl || "");
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
+  const handleImagePick = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setImgFile(file);
+    setPreview(URL.createObjectURL(file));
+  };
+
   const uploadImage = async () => {
-    if (!imgFile) return form.imageUrl;
+    if (!imgFile) return form.imageUrl || "";
     setUploading(true);
-    const fd = new FormData();
-    fd.append("image", imgFile);
-    const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`, { method: "POST", body: fd });
-    const data = await res.json();
-    setUploading(false);
-    return data.data?.url || form.imageUrl;
+    try {
+      const fd = new FormData();
+      fd.append("image", imgFile);
+      const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`, {
+        method: "POST",
+        body: fd,
+      });
+      const data = await res.json();
+      setUploading(false);
+      if (data.success) return data.data.url;
+      throw new Error(data.error?.message || "Upload failed");
+    } catch (e) {
+      setUploading(false);
+      throw e;
+    }
   };
 
   const handleSave = async () => {
-    if (!form.name.trim() || !form.sellingPrice) { setErr("Name and Selling Price are required."); return; }
-    setSaving(true); setErr("");
+    if (!form.name.trim() || !form.sellingPrice) {
+      setErr("Name and Selling Price are required.");
+      return;
+    }
+    setSaving(true);
+    setErr("");
     try {
       const imageUrl = await uploadImage();
       await onSave({
-        ...form, imageUrl,
+        ...form,
+        imageUrl,
         sellingPrice: Number(form.sellingPrice),
         costPrice: Number(form.costPrice || 0),
         deliveryCost: Number(form.deliveryCost || 0),
         availableQuantity: Number(form.availableQuantity || 0),
       });
-    } catch (e) { setErr("Save failed. Try again."); }
+    } catch (e) {
+      setErr("Save failed: " + e.message);
+    }
     setSaving(false);
   };
 
@@ -75,7 +99,7 @@ function ProductForm({ initial, onSave, onCancel }) {
     <div className="modal" style={{ maxWidth: "100%" }}>
       <h3 style={{ marginBottom: 18 }}>{initial?.id ? "Edit Product" : "Add New Product"}</h3>
       {[
-        { k: "name", label: "Product Name *", ph: "e.g. Gold Chain Necklace" },
+        { k: "name", label: "Product Name *", ph: "e.g. iPhone 15 Case" },
         { k: "sellingPrice", label: "Selling Price (N) *", ph: "e.g. 5000", type: "number" },
         { k: "costPrice", label: "Cost Price (N)", ph: "e.g. 2500", type: "number" },
         { k: "deliveryCost", label: "Delivery Cost (N)", ph: "e.g. 500", type: "number" },
@@ -94,16 +118,23 @@ function ProductForm({ initial, onSave, onCancel }) {
       </div>
       <div style={{ marginBottom: 18 }}>
         <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 5 }}>Product Image</label>
-        {form.imageUrl && <img src={form.imageUrl} alt="" style={{ width: 80, height: 80, objectFit: "cover", borderRadius: 8, marginBottom: 8 }} />}
-        <input type="file" accept="image/*" onChange={(e) => setImgFile(e.target.files[0])}
+        {preview && (
+          <img src={preview} alt="preview"
+            style={{ width: 100, height: 100, objectFit: "cover", borderRadius: 8, marginBottom: 8, display: "block" }} />
+        )}
+        <input type="file" accept="image/*" onChange={handleImagePick}
           style={{ fontSize: 13, display: "block" }} />
-        {uploading && <p style={{ fontSize: 12, color: "#888", marginTop: 4 }}>Uploading image...</p>}
+        {uploading && (
+          <p style={{ fontSize: 12, color: "var(--gold)", marginTop: 6, fontWeight: 600 }}>
+            Uploading image... please wait
+          </p>
+        )}
       </div>
       {err && <p style={{ color: "var(--red)", fontSize: 13, marginBottom: 12 }}>{err}</p>}
       <div style={{ display: "flex", gap: 10 }}>
         <button className="btn-outline" onClick={onCancel} style={{ flex: 1 }}>Cancel</button>
-        <button className="btn-gold" onClick={handleSave} disabled={saving} style={{ flex: 2 }}>
-          {saving ? "Saving..." : "Save Product"}
+        <button className="btn-gold" onClick={handleSave} disabled={saving || uploading} style={{ flex: 2 }}>
+          {uploading ? "Uploading Image..." : saving ? "Saving..." : "Save Product"}
         </button>
       </div>
     </div>
@@ -120,15 +151,17 @@ export default function Admin() {
   const [loading, setLoading] = useState(true);
 
   const loadData = async () => {
-    const [pSnap, oSnap] = await Promise.all([
-      getDocs(collection(db, "products")),
-      getDocs(collection(db, "orders")),
-    ]);
-    setProducts(pSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
-    setOrders(oSnap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => {
-      const at = a.createdAt?.seconds || 0, bt = b.createdAt?.seconds || 0;
-      return bt - at;
-    }));
+    setLoading(true);
+    try {
+      const [pSnap, oSnap] = await Promise.all([
+        getDocs(query(collection(db, "products"), orderBy("createdAt", "desc"))),
+        getDocs(query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(50))),
+      ]);
+      setProducts(pSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      setOrders(oSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    } catch (e) {
+      console.error(e);
+    }
     setLoading(false);
   };
 
@@ -140,7 +173,8 @@ export default function Admin() {
     } else {
       await addDoc(collection(db, "products"), { ...data, createdAt: serverTimestamp() });
     }
-    setShowForm(false); setEditing(null);
+    setShowForm(false);
+    setEditing(null);
     loadData();
   };
 
@@ -180,7 +214,9 @@ export default function Admin() {
       </div>
       <div style={{ padding: 16 }}>
         {loading ? (
-          <p style={{ textAlign: "center", padding: 40, color: "#888" }}>Loading...</p>
+          <div style={{ textAlign: "center", padding: 40 }}>
+            <p style={{ color: "var(--gold)", fontWeight: 600 }}>Loading...</p>
+          </div>
         ) : tab === "orders" ? (
           <>
             <h2 style={{ marginBottom: 14, fontSize: 18 }}>Pending Orders ({pendingOrders.length})</h2>
