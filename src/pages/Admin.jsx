@@ -36,7 +36,15 @@ function LoginScreen({ onLogin }) {
 }
 
 function ProductForm({ initial, onSave, onCancel }) {
-  const [form, setForm] = useState(initial || EMPTY_PRODUCT);
+  const [form, setForm] = useState({
+    name: initial?.name || "",
+    sellingPrice: initial?.sellingPrice || "",
+    costPrice: initial?.costPrice || "",
+    deliveryCost: initial?.deliveryCost || "",
+    availableQuantity: initial?.availableQuantity || "",
+    description: initial?.description || "",
+    imageUrl: initial?.imageUrl || "",
+  });
   const [imgFile, setImgFile] = useState(null);
   const [preview, setPreview] = useState(initial?.imageUrl || "");
   const [uploading, setUploading] = useState(false);
@@ -58,10 +66,10 @@ function ProductForm({ initial, onSave, onCancel }) {
     try {
       const fd = new FormData();
       fd.append("image", imgFile);
-      const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`, {
-        method: "POST",
-        body: fd,
-      });
+      const res = await fetch(
+        "https://api.imgbb.com/1/upload?key=" + IMGBB_KEY,
+        { method: "POST", body: fd }
+      );
       const data = await res.json();
       setUploading(false);
       if (data.success) return data.data.url;
@@ -82,7 +90,8 @@ function ProductForm({ initial, onSave, onCancel }) {
     try {
       const imageUrl = await uploadImage();
       await onSave({
-        ...form,
+        name: form.name.trim(),
+        description: form.description.trim(),
         imageUrl,
         sellingPrice: Number(form.sellingPrice),
         costPrice: Number(form.costPrice || 0),
@@ -97,9 +106,9 @@ function ProductForm({ initial, onSave, onCancel }) {
 
   return (
     <div className="modal" style={{ maxWidth: "100%" }}>
-      <h3 style={{ marginBottom: 18 }}>{initial?.id ? "Edit Product" : "Add New Product"}</h3>
+      <h3 style={{ marginBottom: 18 }}>{initial?.docId ? "Edit Product" : "Add New Product"}</h3>
       {[
-        { k: "name", label: "Product Name *", ph: "e.g. iPhone 15 Case" },
+        { k: "name", label: "Product Name *", ph: "e.g. iPhone 17 Case" },
         { k: "sellingPrice", label: "Selling Price (N) *", ph: "e.g. 5000", type: "number" },
         { k: "costPrice", label: "Cost Price (N)", ph: "e.g. 2500", type: "number" },
         { k: "deliveryCost", label: "Delivery Cost (N)", ph: "e.g. 500", type: "number" },
@@ -134,7 +143,7 @@ function ProductForm({ initial, onSave, onCancel }) {
       <div style={{ display: "flex", gap: 10 }}>
         <button className="btn-outline" onClick={onCancel} style={{ flex: 1 }}>Cancel</button>
         <button className="btn-gold" onClick={handleSave} disabled={saving || uploading} style={{ flex: 2 }}>
-          {uploading ? "Uploading Image..." : saving ? "Saving..." : "Save Product"}
+          {uploading ? "Uploading..." : saving ? "Saving..." : "Save Product"}
         </button>
       </div>
     </div>
@@ -155,43 +164,76 @@ export default function Admin() {
     setLoading(true);
     setError("");
     try {
-      const [pSnap, oSnap] = await Promise.all([
-        getDocs(collection(db, "products")),
-        getDocs(collection(db, "orders")),
-      ]);
-      const prods = pSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      const ords = oSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      ords.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      const pSnap = await getDocs(collection(db, "products"));
+      const oSnap = await getDocs(collection(db, "orders"));
+
+      const prods = pSnap.docs.map((d) => ({
+        docId: d.id,
+        ...d.data(),
+      }));
+
+      const ords = oSnap.docs.map((d) => ({
+        docId: d.id,
+        ...d.data(),
+      }));
+
+      ords.sort((a, b) => {
+        const at = a.createdAt?.seconds || 0;
+        const bt = b.createdAt?.seconds || 0;
+        return bt - at;
+      });
+
+      console.log("Products loaded:", prods.length);
+      console.log("Orders loaded:", ords.length);
+
       setProducts(prods);
       setOrders(ords);
     } catch (e) {
-      setError("Failed to load data: " + e.message);
-      console.error(e);
+      console.error("Load error:", e);
+      setError("Failed to load: " + e.message);
     }
     setLoading(false);
   };
 
-  useEffect(() => { if (authed) loadData(); }, [authed]);
+  useEffect(() => {
+    if (authed) loadData();
+  }, [authed]);
 
   const handleSaveProduct = async (data) => {
-    if (editing?.id) {
-      await updateDoc(doc(db, "products", editing.id), data);
-    } else {
-      await addDoc(collection(db, "products"), { ...data, createdAt: serverTimestamp() });
+    try {
+      if (editing?.docId) {
+        await updateDoc(doc(db, "products", editing.docId), data);
+      } else {
+        await addDoc(collection(db, "products"), {
+          ...data,
+          createdAt: serverTimestamp(),
+        });
+      }
+      setShowForm(false);
+      setEditing(null);
+      await loadData();
+    } catch (e) {
+      console.error("Save error:", e);
+      alert("Failed to save: " + e.message);
     }
-    setShowForm(false);
-    setEditing(null);
-    await loadData();
   };
 
   const handleOrderAction = async (order, action) => {
-    await updateDoc(doc(db, "orders", order.id), { status: action });
-    if (action === "successful") {
-      await updateDoc(doc(db, "products", order.productId), {
-        availableQuantity: increment(-order.quantity),
-      });
+    try {
+      await updateDoc(doc(db, "orders", order.docId), { status: action });
+      if (action === "successful") {
+        const product = products.find((p) => p.docId === order.productId);
+        if (product) {
+          await updateDoc(doc(db, "products", order.productId), {
+            availableQuantity: increment(-order.quantity),
+          });
+        }
+      }
+      await loadData();
+    } catch (e) {
+      console.error("Order action error:", e);
+      alert("Action failed: " + e.message);
     }
-    await loadData();
   };
 
   if (!authed) return <LoginScreen onLogin={() => setAuthed(true)} />;
@@ -204,7 +246,8 @@ export default function Admin() {
       <header style={{ background: "var(--dark)", padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <h1 style={{ color: "var(--gold)", fontSize: 20 }}>Bright Admin</h1>
         <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-          <button onClick={loadData} style={{ background: "transparent", border: "1px solid #555", color: "#aaa", borderRadius: 6, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}>
+          <button onClick={loadData}
+            style={{ background: "transparent", border: "1px solid #555", color: "#aaa", borderRadius: 6, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}>
             Refresh
           </button>
           <a href="/" style={{ color: "#aaa", fontSize: 13, textDecoration: "none" }}>Store</a>
@@ -213,8 +256,8 @@ export default function Admin() {
 
       <div style={{ display: "flex", background: "white", borderBottom: "1.5px solid var(--border)" }}>
         {[
-          { id: "orders", label: `Orders${pendingOrders.length ? ` (${pendingOrders.length})` : ""}` },
-          { id: "products", label: `Products (${products.length})` },
+          { id: "orders", label: "Orders" + (pendingOrders.length ? " (" + pendingOrders.length + ")" : "") },
+          { id: "products", label: "Products (" + products.length + ")" },
         ].map((t) => (
           <button key={t.id} onClick={() => setTab(t.id)}
             style={{
@@ -230,7 +273,8 @@ export default function Admin() {
         {error && (
           <div style={{ background: "#FEE2E2", color: "var(--red)", padding: 14, borderRadius: 10, marginBottom: 16, fontSize: 13 }}>
             {error}
-            <button onClick={loadData} style={{ marginLeft: 10, fontWeight: 700, background: "none", border: "none", color: "var(--red)", cursor: "pointer" }}>
+            <button onClick={loadData}
+              style={{ marginLeft: 10, fontWeight: 700, background: "none", border: "none", color: "var(--red)", cursor: "pointer" }}>
               Retry
             </button>
           </div>
@@ -239,7 +283,7 @@ export default function Admin() {
         {loading ? (
           <div style={{ textAlign: "center", padding: 60 }}>
             <div style={{ fontSize: 32, marginBottom: 12 }}>⏳</div>
-            <p style={{ color: "var(--gold)", fontWeight: 600 }}>Loading...</p>
+            <p style={{ color: "var(--gold)", fontWeight: 600 }}>Loading data...</p>
           </div>
         ) : tab === "orders" ? (
           <>
@@ -253,10 +297,13 @@ export default function Admin() {
               </div>
             ) : (
               pendingOrders.map((o) => (
-                <div key={o.id} className="card" style={{ marginBottom: 14, padding: 16 }}>
+                <div key={o.docId} className="card" style={{ marginBottom: 14, padding: 16 }}>
                   <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
-                    {o.productImage && (
-                      <img src={o.productImage} alt="" style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 8, flexShrink: 0 }} />
+                    {o.productImage ? (
+                      <img src={o.productImage} alt=""
+                        style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 8, flexShrink: 0 }} />
+                    ) : (
+                      <div style={{ width: 56, height: 56, background: "#f0ece8", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, flexShrink: 0 }}>📱</div>
                     )}
                     <div style={{ flex: 1 }}>
                       <p style={{ fontWeight: 700, fontSize: 15 }}>{o.productName}</p>
@@ -265,10 +312,10 @@ export default function Admin() {
                     </div>
                   </div>
                   <div style={{ background: "#f9f5f0", borderRadius: 8, padding: "10px 12px", fontSize: 13, color: "#444", lineHeight: 1.8, marginBottom: 14 }}>
-                    <p>👤 <strong>{o.customerName}</strong></p>
-                    <p>📞 {o.customerPhone}</p>
-                    <p>📍 {o.deliveryAddress}</p>
-                    {o.notes && <p>📝 {o.notes}</p>}
+                    <p>Name: <strong>{o.customerName}</strong></p>
+                    <p>Phone: {o.customerPhone}</p>
+                    <p>Address: {o.deliveryAddress}</p>
+                    {o.notes && <p>Notes: {o.notes}</p>}
                   </div>
                   <div style={{ display: "flex", gap: 10 }}>
                     <button onClick={() => handleOrderAction(o, "cancelled")}
@@ -279,21 +326,19 @@ export default function Admin() {
                     <button onClick={() => handleOrderAction(o, "successful")}
                       style={{ flex: 2, padding: "10px 0", border: "none", background: "var(--green)",
                         color: "white", borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: "pointer" }}>
-                      ✓ Mark Delivered
+                      Mark Delivered
                     </button>
                   </div>
                 </div>
               ))
             )}
-
             {pastOrders.length > 0 && (
               <>
                 <h2 style={{ margin: "24px 0 12px", fontSize: 16, color: "#888" }}>
                   Past Orders ({pastOrders.length})
                 </h2>
                 {pastOrders.map((o) => (
-                  <div key={o.id} style={{ background: "white", borderRadius: 12, padding: 14, marginBottom: 10,
-                    border: "1px solid var(--border)" }}>
+                  <div key={o.docId} style={{ background: "white", borderRadius: 12, padding: 14, marginBottom: 10, border: "1px solid var(--border)" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
                       <span style={{ fontSize: 14, fontWeight: 600 }}>{o.productName}</span>
                       <span style={{
@@ -302,7 +347,7 @@ export default function Admin() {
                         color: o.status === "successful" ? "var(--green)" : "var(--red)"
                       }}>{o.status}</span>
                     </div>
-                    <p style={{ fontSize: 13, color: "#666" }}>{o.customerName} • {o.customerPhone}</p>
+                    <p style={{ fontSize: 13, color: "#666" }}>{o.customerName} - {o.customerPhone}</p>
                     <p style={{ fontSize: 13, color: "var(--gold)", fontWeight: 600 }}>{fmt(o.total)}</p>
                   </div>
                 ))}
@@ -314,7 +359,9 @@ export default function Admin() {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
               <h2 style={{ fontSize: 18 }}>Products ({products.length})</h2>
               <button className="btn-gold" style={{ padding: "10px 18px", fontSize: 14 }}
-                onClick={() => { setEditing(null); setShowForm(true); }}>+ Add</button>
+                onClick={() => { setEditing(null); setShowForm(true); }}>
+                + Add
+              </button>
             </div>
 
             {showForm && (
@@ -337,21 +384,26 @@ export default function Admin() {
               </div>
             ) : (
               products.map((p) => (
-                <div key={p.id} className="card" style={{ marginBottom: 14, padding: 14 }}>
+                <div key={p.docId} className="card" style={{ marginBottom: 14, padding: 14 }}>
                   <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
                     {p.imageUrl ? (
-                      <img src={p.imageUrl} alt="" style={{ width: 70, height: 70, objectFit: "cover", borderRadius: 8, flexShrink: 0 }} />
+                      <img src={p.imageUrl} alt=""
+                        style={{ width: 70, height: 70, objectFit: "cover", borderRadius: 8, flexShrink: 0 }} />
                     ) : (
                       <div style={{ width: 70, height: 70, background: "#f0ece8", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, flexShrink: 0 }}>📱</div>
                     )}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <p style={{ fontWeight: 700, fontSize: 15, marginBottom: 2 }}>{p.name}</p>
                       <p style={{ fontSize: 13, color: "var(--gold)", fontWeight: 600 }}>{fmt(p.sellingPrice)}</p>
-                      <p style={{ fontSize: 12, color: "#777" }}>Stock: {p.availableQuantity} • Cost: {fmt(p.costPrice)}</p>
-                      {p.description && <p style={{ fontSize: 12, color: "#999", marginTop: 2 }}>{p.description}</p>}
+                      <p style={{ fontSize: 12, color: "#777" }}>Stock: {p.availableQuantity} - Cost: {fmt(p.costPrice)}</p>
+                      {p.description && (
+                        <p style={{ fontSize: 12, color: "#999", marginTop: 2 }}>{p.description}</p>
+                      )}
                     </div>
                     <button className="btn-gold" style={{ fontSize: 13, padding: "8px 16px", flexShrink: 0 }}
-                      onClick={() => { setEditing(p); setShowForm(true); }}>Edit</button>
+                      onClick={() => { setEditing(p); setShowForm(true); }}>
+                      Edit
+                    </button>
                   </div>
                 </div>
               ))
