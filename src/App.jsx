@@ -145,10 +145,12 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(!productsCache);
-  const [dark, setDark] = useState(() => localStorage.getItem("theme") === "dark");
+  const [dark, setDark] = useState(() => {
+    try { return localStorage.getItem("theme") === "dark"; } catch { return false; }
+  });
 
   useEffect(() => {
-    localStorage.setItem("theme", dark ? "dark" : "light");
+    try { localStorage.setItem("theme", dark ? "dark" : "light"); } catch {}
     document.body.style.background = dark ? "#121212" : "";
   }, [dark]);
 
@@ -231,7 +233,7 @@ export default function App() {
                 }}>
                 {product.featured && (
                   <div style={{ position: "absolute", top: 8, right: 8, background: "var(--gold)", color: "white", fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20, zIndex: 2 }}>
-                    ⭐ FEATURED
+                    FEATURED
                   </div>
                 )}
                 <div style={{ position: "relative", paddingTop: "100%", background: dark ? "#2a2a2a" : "#f0ece8" }}>
