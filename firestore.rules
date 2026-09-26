@@ -1,13 +1,37 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function isAdmin() {
+      return request.auth != null &&
+        (request.auth.token.admin == true || request.auth.token.email == "cchughiefe@gmail.com");
+    }
     match /products/{productId} {
       allow read: if true;
-      allow write: if false;
+      allow create, update, delete: if isAdmin();
     }
     match /orders/{orderId} {
-      allow create: if true;
-      allow read, update, delete: if false;
+      allow create: if request.resource.data.items is list
+        && request.resource.data.items.size() > 0
+        && request.resource.data.items.size() <= 30
+        && request.resource.data.total is number
+        && request.resource.data.total > 0
+        && request.resource.data.customer.phone is string
+        && request.resource.data.orderRef is string;
+      allow read: if isAdmin();
+      allow update, delete: if isAdmin();
+    }
+    match /publicOrders/{orderRef} {
+      allow get: if true;
+      allow list: if false;
+      allow create: if request.resource.data.orderRef == orderRef
+        && request.resource.data.phoneLast7 is string
+        && request.resource.data.phoneLast7.size() == 7
+        && request.resource.data.status == "pending";
+      allow update, delete: if isAdmin();
+    }
+    match /settings/{settingId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
     }
   }
 }

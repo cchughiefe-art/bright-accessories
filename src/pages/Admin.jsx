@@ -1,29 +1,39 @@
 import React, { useState, useEffect } from "react";
 import {
-  collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, increment
+  collection, getDoc, getDocs, addDoc, setDoc, updateDoc, deleteDoc, doc, serverTimestamp, increment
 } from "firebase/firestore";
-import { db } from "../firebase";
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from "firebase/auth";
+import { db, auth } from "../firebase";
 
 const fmt = (n) => `₦${Number(n || 0).toLocaleString("en-NG")}`;
 const IMGBB_KEY = "d025f246af80b099e6744a75bdfc8d30";
-const ADMIN_PASSWORD = "Brightaccess2026";
-
 function LoginScreen({ onLogin }) {
+  const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const login = async () => {
+    setBusy(true); setErr("");
+    try { await signInWithEmailAndPassword(auth, email.trim(), pw); onLogin(); }
+    catch { setErr("Email or password is incorrect."); }
+    finally { setBusy(false); }
+  };
   return (
     <div style={{ minHeight:"100vh", background:"#1A1A1A", display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
       <div style={{ background:"white", borderRadius:16, padding:32, width:"100%", maxWidth:360, textAlign:"center" }}>
         <h1 style={{ color:"var(--gold)", marginBottom:6, fontSize:24 }}>Bright Admin</h1>
-        <p style={{ color:"#888", fontSize:13, marginBottom:24 }}>Enter password to continue</p>
+        <p style={{ color:"#888", fontSize:13, marginBottom:24 }}>Sign in with your protected administrator account</p>
+        <input className="input-field" type="email" placeholder="Admin email"
+          value={email} onChange={(e) => setEmail(e.target.value)}
+          style={{ marginBottom:12 }} />
         <input className="input-field" type="password" placeholder="Admin Password"
           value={pw} onChange={(e) => setPw(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && (pw === ADMIN_PASSWORD ? onLogin() : setErr("Wrong password"))}
+          onKeyDown={(e) => e.key === "Enter" && login()}
           style={{ marginBottom:12 }} />
         {err && <p style={{ color:"var(--red)", fontSize:13, marginBottom:10 }}>{err}</p>}
         <button className="btn-gold" style={{ width:"100%" }}
-          onClick={() => pw === ADMIN_PASSWORD ? onLogin() : setErr("Wrong password")}>
-          Login
+          disabled={busy || !email || !pw} onClick={login}>
+          {busy ? "Signing in..." : "Login"}
         </button>
       </div>
     </div>
@@ -31,7 +41,7 @@ function LoginScreen({ onLogin }) {
 }
 
 function Dashboard({ products, orders }) {
-  const successful = orders.filter(o => o.status === "successful");
+  const successful = orders.filter(o => ["successful", "delivered"].includes(o.status));
   const pending = orders.filter(o => o.status === "pending");
   const revenue = successful.reduce((s, o) => s + (o.total || 0), 0);
   const cogs = successful.reduce((s, o) => s + ((o.costPrice || 0) * (o.quantity || 1)), 0);
@@ -90,6 +100,7 @@ function ProductForm({ initial, onSave, onCancel }) {
     deliveryCost: initial?.deliveryCost || "",
     availableQuantity: initial?.availableQuantity || "",
     description: initial?.description || "",
+    category: initial?.category || "Accessories",
     imageUrl: initial?.imageUrl || "",
     featured: initial?.featured || false,
   });
@@ -132,6 +143,8 @@ function ProductForm({ initial, onSave, onCancel }) {
       await onSave({
         name: form.name.trim(),
         description: form.description.trim(),
+        category: form.category.trim() || "Accessories",
+        active: true,
         imageUrl,
         featured: form.featured,
         sellingPrice: Number(form.sellingPrice),
@@ -164,6 +177,11 @@ function ProductForm({ initial, onSave, onCancel }) {
         <textarea className="input-field" rows={2} placeholder="Short product description"
           value={form.description} onChange={(e) => set("description", e.target.value)} />
       </div>
+      <div style={{ marginBottom:12 }}>
+        <label style={{ fontSize:13, fontWeight:600, display:"block", marginBottom:5 }}>Category</label>
+        <input className="input-field" placeholder="e.g. Chargers, Cases, Audio"
+          value={form.category} onChange={(e) => set("category", e.target.value)} />
+      </div>
       <div style={{ marginBottom:14 }}>
         <label style={{ display:"flex", alignItems:"center", gap:10, cursor:"pointer" }}>
           <input type="checkbox" checked={form.featured} onChange={(e) => set("featured", e.target.checked)}
@@ -192,52 +210,98 @@ function ProductForm({ initial, onSave, onCancel }) {
 }
 
 function OrderCard({ o, onAction, fmt }) {
+  const items = o.items || [{ name:o.productName, imageUrl:o.productImage, price:o.sellingPrice, quantity:o.quantity }];
+  const customer = o.customer || { name:o.customerName, phone:o.customerPhone, address:o.deliveryAddress };
+  const active = ["pending", "confirmed", "processing", "shipped"].includes(o.status);
+  const nextLabel = o.status === "pending" ? "Confirm Order" : o.status === "confirmed" ? "Start Processing" : o.status === "processing" ? "Mark Shipped" : "Mark Delivered";
   return (
     <div className="card" style={{ marginBottom:14, padding:16 }}>
       <div style={{ display:"flex", gap:12, marginBottom:12 }}>
-        {o.productImage ? (
-          <img src={o.productImage} alt="" loading="lazy"
+        {items[0]?.imageUrl ? (
+          <img src={items[0].imageUrl} alt="" loading="lazy"
             style={{ width:56, height:56, objectFit:"cover", borderRadius:8, flexShrink:0 }} />
         ) : (
           <div style={{ width:56, height:56, background:"#f0ece8", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", fontSize:24, flexShrink:0 }}>📱</div>
         )}
         <div style={{ flex:1 }}>
-          <p style={{ fontWeight:700, fontSize:15 }}>{o.productName}</p>
-          <p style={{ fontSize:13, color:"#555" }}>Qty: {o.quantity} x {fmt(o.sellingPrice)}</p>
+          <p style={{ fontWeight:700, fontSize:15 }}>{o.orderRef || items[0]?.name}</p>
+          <p style={{ fontSize:13, color:"#555" }}>{items.map(i => i.name + " × " + i.quantity).join(", ")}</p>
           <p style={{ color:"var(--gold)", fontWeight:700, fontSize:16 }}>Total: {fmt(o.total)}</p>
         </div>
       </div>
       <div style={{ background:"#f9f5f0", borderRadius:8, padding:"10px 12px", fontSize:13, color:"#444", lineHeight:1.8, marginBottom:14 }}>
-        <p>Name: {o.customerName}</p>
-        <p>Phone: {o.customerPhone}</p>
-        <p>Address: {o.deliveryAddress}</p>
+        <p>Name: {customer.name}</p>
+        <p>Phone: {customer.phone}</p>
+        <p>Address: {customer.address}</p>
+        <p>Payment: {o.paymentMethod === "transfer" ? "Bank transfer" : "Cash on delivery"} · {o.paymentStatus || "pending"}</p>
+        {o.receiptUrl && <p><a href={o.receiptUrl} target="_blank" rel="noreferrer" style={{color:"var(--gold)",fontWeight:700}}>View receipt</a></p>}
         {o.notes && <p>Notes: {o.notes}</p>}
       </div>
-      {o.status === "pending" && (
+      {active && (
         <div style={{ display:"flex", gap:10 }}>
           <button onClick={() => onAction(o, "cancelled")}
             style={{ flex:1, padding:"10px 0", border:"1.5px solid var(--red)", background:"transparent", color:"var(--red)", borderRadius:8, fontWeight:600, fontSize:14, cursor:"pointer" }}>
             Cancel
           </button>
-          <button onClick={() => onAction(o, "successful")}
+          <button onClick={() => onAction(o, "advance")}
             style={{ flex:2, padding:"10px 0", border:"none", background:"var(--green)", color:"white", borderRadius:8, fontWeight:600, fontSize:14, cursor:"pointer" }}>
-            Mark Delivered
+            {nextLabel}
           </button>
         </div>
       )}
-      {o.status !== "pending" && (
+      {!active && (
         <span style={{
           fontSize:12, fontWeight:600, padding:"4px 12px", borderRadius:20,
-          background: o.status === "successful" ? "#D1FAE5" : "#FEE2E2",
-          color: o.status === "successful" ? "var(--green)" : "var(--red)"
+          background: ["successful","delivered"].includes(o.status) ? "#D1FAE5" : "#FEE2E2",
+          color: ["successful","delivered"].includes(o.status) ? "var(--green)" : "var(--red)"
         }}>{o.status}</span>
       )}
     </div>
   );
 }
 
+function StoreSettings({ value, onSaved }) {
+  const [form, setForm] = useState({
+    bankName:value.bankName || "", accountNumber:value.accountNumber || "",
+    accountName:value.accountName || "", whatsapp:value.whatsapp || "234",
+    mainland:value.deliveryZones?.find(z=>z.id==="mainland")?.fee || 2500,
+    island:value.deliveryZones?.find(z=>z.id==="island")?.fee || 3500,
+    nationwide:value.deliveryZones?.find(z=>z.id==="nationwide")?.fee || 5000,
+  });
+  const [busy,setBusy]=useState(false), [message,setMessage]=useState("");
+  const set=(k,v)=>setForm(f=>({...f,[k]:v}));
+  const save=async()=>{
+    setBusy(true);setMessage("");
+    try {
+      const data={bankName:form.bankName.trim(),accountNumber:form.accountNumber.trim(),accountName:form.accountName.trim(),whatsapp:form.whatsapp.replace(/\D/g,""),deliveryZones:[
+        {id:"mainland",name:"Lagos Mainland",fee:Number(form.mainland)},
+        {id:"island",name:"Lagos Island",fee:Number(form.island)},
+        {id:"nationwide",name:"Outside Lagos",fee:Number(form.nationwide)}
+      ],updatedAt:serverTimestamp()};
+      await setDoc(doc(db,"settings","store"),data,{merge:true}); onSaved(data); setMessage("Store settings saved. Website and APK will use them immediately.");
+    } catch(e){setMessage("Could not save: "+e.message)} finally{setBusy(false)}
+  };
+  return <div className="card" style={{padding:20,maxWidth:680,margin:"0 auto"}}><h2 style={{marginBottom:5}}>Store Settings</h2><p style={{color:"#777",fontSize:13,marginBottom:22}}>Update payment, support and delivery details without changing code.</p>
+    <h3 style={{fontSize:15,marginBottom:12}}>Bank transfer account</h3>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+      <label>Bank name<input className="input-field" value={form.bankName} onChange={e=>set("bankName",e.target.value)}/></label>
+      <label>Account number<input className="input-field" inputMode="numeric" value={form.accountNumber} onChange={e=>set("accountNumber",e.target.value)}/></label>
+    </div>
+    <label style={{display:"block",marginTop:12}}>Account name<input className="input-field" value={form.accountName} onChange={e=>set("accountName",e.target.value)}/></label>
+    <label style={{display:"block",marginTop:12}}>WhatsApp number <small style={{color:"#888"}}>(country code, no +)</small><input className="input-field" value={form.whatsapp} onChange={e=>set("whatsapp",e.target.value)}/></label>
+    <h3 style={{fontSize:15,margin:"24px 0 12px"}}>Delivery charges</h3>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12}}>
+      <label>Lagos Mainland<input className="input-field" type="number" value={form.mainland} onChange={e=>set("mainland",e.target.value)}/></label>
+      <label>Lagos Island<input className="input-field" type="number" value={form.island} onChange={e=>set("island",e.target.value)}/></label>
+      <label>Outside Lagos<input className="input-field" type="number" value={form.nationwide} onChange={e=>set("nationwide",e.target.value)}/></label>
+    </div>
+    {message&&<p style={{margin:"14px 0",fontSize:13,color:message.startsWith("Could")?"var(--red)":"var(--green)"}}>{message}</p>}
+    <button className="btn-gold" disabled={busy||!form.bankName||!form.accountNumber||!form.accountName} onClick={save} style={{width:"100%",marginTop:20}}>{busy?"Saving…":"Save Store Settings"}</button>
+  </div>;
+}
+
 export default function Admin() {
-  const [authed, setAuthed] = useState(false);
+  const [authed, setAuthed] = useState(null);
   const [tab, setTab] = useState("dashboard");
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
@@ -247,23 +311,27 @@ export default function Admin() {
   const [error, setError] = useState("");
   const [orderSearch, setOrderSearch] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [settings, setSettings] = useState({});
 
   const loadData = async () => {
     setLoading(true); setError("");
     try {
-      const [pSnap, oSnap] = await Promise.all([
+      const [pSnap, oSnap, settingsSnap] = await Promise.all([
         getDocs(collection(db, "products")),
         getDocs(collection(db, "orders")),
+        getDoc(doc(db, "settings", "store")),
       ]);
       const prods = pSnap.docs.map((d) => ({ docId:d.id, ...d.data() }));
       const ords = oSnap.docs.map((d) => ({ docId:d.id, ...d.data() }));
       ords.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
       setProducts(prods);
       setOrders(ords);
+      if (settingsSnap.exists()) setSettings(settingsSnap.data());
     } catch (e) { setError("Failed to load: " + e.message); }
     setLoading(false);
   };
 
+  useEffect(() => onAuthStateChanged(auth, (user) => setAuthed(Boolean(user))), []);
   useEffect(() => { if (authed) loadData(); }, [authed]);
 
   const handleSaveProduct = async (data) => {
@@ -288,25 +356,37 @@ export default function Admin() {
 
   const handleOrderAction = async (order, action) => {
     try {
-      await updateDoc(doc(db, "orders", order.docId), { status:action });
-      if (action === "successful") {
-        await updateDoc(doc(db, "products", order.productId), {
-          availableQuantity: increment(-order.quantity),
+      const next = action === "cancelled" ? "cancelled" :
+        order.status === "pending" ? "confirmed" :
+        order.status === "confirmed" ? "processing" :
+        order.status === "processing" ? "shipped" : "delivered";
+      await updateDoc(doc(db, "orders", order.docId), {
+        status:next,
+        paymentStatus: order.paymentMethod === "transfer" && next === "confirmed" ? "verified" : (order.paymentStatus || "pay_on_delivery")
+      });
+      if (order.orderRef) await updateDoc(doc(db, "publicOrders", order.orderRef), {
+        status:next, updatedAt:serverTimestamp()
+      });
+      if (next === "delivered") {
+        const items = order.items || [{ productId:order.productId, quantity:order.quantity }];
+        for (const item of items) await updateDoc(doc(db, "products", item.productId), {
+          availableQuantity: increment(-Number(item.quantity || 1)),
         });
       }
       await loadData();
     } catch (e) { alert("Action failed: " + e.message); }
   };
 
+  if (authed === null) return <div style={{minHeight:"100vh",display:"grid",placeItems:"center"}}>Loading…</div>;
   if (!authed) return <LoginScreen onLogin={() => setAuthed(true)} />;
 
   const pendingOrders = orders.filter((o) => o.status === "pending");
   const pastOrders = orders.filter((o) => o.status !== "pending");
   const filteredOrders = orderSearch.trim()
     ? orders.filter(o =>
-        o.customerName?.toLowerCase().includes(orderSearch.toLowerCase()) ||
-        o.customerPhone?.includes(orderSearch) ||
-        o.productName?.toLowerCase().includes(orderSearch.toLowerCase())
+        (o.customerName || o.customer?.name)?.toLowerCase().includes(orderSearch.toLowerCase()) ||
+        (o.customerPhone || o.customer?.phone)?.includes(orderSearch) ||
+        (o.productName || o.orderRef || o.items?.map(i=>i.name).join(" "))?.toLowerCase().includes(orderSearch.toLowerCase())
       )
     : null;
 
@@ -314,6 +394,7 @@ export default function Admin() {
     { id:"dashboard", label:"Dashboard" },
     { id:"orders", label:"Orders" + (pendingOrders.length ? " (" + pendingOrders.length + ")" : "") },
     { id:"products", label:"Products (" + products.length + ")" },
+    { id:"settings", label:"Store Settings" },
   ];
 
   return (
@@ -326,6 +407,10 @@ export default function Admin() {
             Refresh
           </button>
           <a href="/" style={{ color:"#aaa", fontSize:13, textDecoration:"none" }}>Store</a>
+          <button onClick={() => signOut(auth)}
+            style={{ background:"transparent", border:"1px solid #555", color:"#aaa", borderRadius:6, padding:"6px 12px", fontSize:12 }}>
+            Sign out
+          </button>
         </div>
       </header>
 
@@ -387,14 +472,14 @@ export default function Admin() {
                     {pastOrders.map((o) => (
                       <div key={o.docId} style={{ background:"white", borderRadius:12, padding:14, marginBottom:10, border:"1px solid var(--border)" }}>
                         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
-                          <span style={{ fontSize:14, fontWeight:600 }}>{o.productName}</span>
+                          <span style={{ fontSize:14, fontWeight:600 }}>{o.orderRef || o.productName || o.items?.map(i=>i.name).join(", ")}</span>
                           <span style={{
                             fontSize:12, fontWeight:600, padding:"3px 10px", borderRadius:20,
                             background: o.status === "successful" ? "#D1FAE5" : "#FEE2E2",
                             color: o.status === "successful" ? "var(--green)" : "var(--red)"
                           }}>{o.status}</span>
                         </div>
-                        <p style={{ fontSize:13, color:"#666" }}>{o.customerName} - {o.customerPhone}</p>
+                        <p style={{ fontSize:13, color:"#666" }}>{o.customerName || o.customer?.name} - {o.customerPhone || o.customer?.phone}</p>
                         <p style={{ fontSize:13, color:"var(--gold)", fontWeight:600 }}>{fmt(o.total)}</p>
                       </div>
                     ))}
@@ -403,6 +488,8 @@ export default function Admin() {
               </>
             )}
           </>
+        ) : tab === "settings" ? (
+          <StoreSettings value={settings} onSaved={setSettings} />
         ) : (
           <>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
