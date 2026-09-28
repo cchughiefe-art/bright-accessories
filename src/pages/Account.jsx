@@ -23,6 +23,10 @@ const statusNames = {
 };
 
 const money = (value) => `₦${Number(value || 0).toLocaleString("en-NG")}`;
+const verificationSettings = {
+  url: "https://bright-accessories.vercel.app/account?verified=1",
+  handleCodeInApp: false,
+};
 const dateText = (value) => {
   const date = value?.toDate?.() || (value ? new Date(value) : null);
   return date && !Number.isNaN(date.getTime())
@@ -51,11 +55,8 @@ function AuthForm() {
       } else if (mode === "signup") {
         const result = await createUserWithEmailAndPassword(auth, email.trim(), password);
         if (name.trim()) await updateProfile(result.user, { displayName: name.trim() });
-        await sendEmailVerification(result.user);
-        if (new URLSearchParams(window.location.search).get("next") === "checkout") {
-          window.location.replace("/?checkout=1");
-          return;
-        }
+        await sendEmailVerification(result.user, verificationSettings);
+        sessionStorage.setItem("bright-verification-notice", "sent");
         setMessage("Account created. We sent a verification link to your email.");
       } else {
         await signInWithEmailAndPassword(auth, email.trim(), password);
@@ -135,6 +136,7 @@ export default function Account() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [verificationSent, setVerificationSent] = useState(false);
+  const [verificationMessage, setVerificationMessage] = useState(() => sessionStorage.getItem("bright-verification-notice") === "sent" ? "Verification email sent. Check Inbox, Spam and Promotions." : "");
 
   useEffect(() => onAuthStateChanged(auth, setUser), []);
   useEffect(() => {
@@ -162,6 +164,21 @@ export default function Account() {
   }, [user]);
 
   const firstName = useMemo(() => user?.displayName?.split(" ")[0] || "there", [user]);
+  const resendVerification = async () => {
+    setVerificationMessage("");
+    try {
+      await sendEmailVerification(user, verificationSettings);
+      sessionStorage.setItem("bright-verification-notice", "sent");
+      setVerificationSent(true);
+      setVerificationMessage("A fresh verification email was sent. Check Inbox, Spam and Promotions.");
+    } catch (err) {
+      const messages = {
+        "auth/too-many-requests": "Too many emails were requested. Wait a few minutes before trying again.",
+        "auth/unauthorized-continue-uri": "Add bright-accessories.vercel.app to Firebase Authentication authorized domains.",
+      };
+      setVerificationMessage(messages[err.code] || "Firebase could not send the email. Please try again shortly.");
+    }
+  };
   if (user === undefined) return <div className="account-loading">Loading your account…</div>;
   if (!user) return <AuthForm />;
 
@@ -170,7 +187,7 @@ export default function Account() {
       <header className="account-topbar"><a className="account-brand" href="/">BRIGHT <span>ACCESSORIES</span></a><nav><a href="/">Store</a><a href="/admin">Admin login</a><button onClick={() => signOut(auth)}>Sign out</button></nav></header>
       <main className="account-shell">
         <section className="account-heading"><div><p className="eyebrow">MY ACCOUNT</p><h1>Hello, {firstName}.</h1><p>Track purchases from order received to delivery.</p></div><div className="profile-chip"><b>{(user.displayName || user.email || "B").slice(0, 1).toUpperCase()}</b><span>{user.displayName || "Bright customer"}<small>{user.email}</small></span></div></section>
-        {!user.emailVerified && <aside className="verification"><div><b>Verify your email</b><p>Verify it to connect older orders placed with {user.email}.</p></div><button disabled={verificationSent} onClick={async () => { await sendEmailVerification(user); setVerificationSent(true); }}>{verificationSent ? "Email sent" : "Send verification"}</button></aside>}
+        {!user.emailVerified && <aside className="verification"><div><b>Verify {user.email}</b><p>{verificationMessage || "Open the Firebase email to verify your account and connect older orders."}</p><small>You can still check out while waiting for the email.</small></div><div className="verification-actions"><button disabled={verificationSent} onClick={resendVerification}>{verificationSent ? "Email sent" : "Resend email"}</button>{new URLSearchParams(window.location.search).get("next") === "checkout" && <a href="/?checkout=1">Continue to checkout</a>}</div></aside>}
         <section className="orders-heading"><div><p className="eyebrow">ORDER HISTORY</p><h2>Your orders</h2></div><span>{orders.length} order{orders.length === 1 ? "" : "s"}</span></section>
         {loading ? <div className="orders-empty">Loading your orders…</div> : error ? <div className="orders-empty error">{error}</div> : orders.length ? <div className="orders-list">{orders.map((order) => <OrderCard order={order} key={order.id} />)}</div> : <div className="orders-empty"><b>No orders here yet</b><p>Orders placed while signed in will appear here automatically.</p><a href="/">Start shopping</a></div>}
       </main>
