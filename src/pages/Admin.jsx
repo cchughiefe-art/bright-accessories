@@ -289,6 +289,7 @@ function StoreSettings({ value, onSaved }) {
   const [form, setForm] = useState({
     bankName:value.bankName || "", accountNumber:value.accountNumber || "",
     accountName:value.accountName || "", whatsapp:value.whatsapp || "234",
+    announcement:value.announcement || "Lagos delivery and nationwide shipping",
     mainland:value.deliveryZones?.find(z=>z.id==="mainland")?.fee || 2500,
     island:value.deliveryZones?.find(z=>z.id==="island")?.fee || 3500,
     nationwide:value.deliveryZones?.find(z=>z.id==="nationwide")?.fee || 5000,
@@ -298,7 +299,7 @@ function StoreSettings({ value, onSaved }) {
   const save=async()=>{
     setBusy(true);setMessage("");
     try {
-      const data={bankName:form.bankName.trim(),accountNumber:form.accountNumber.trim(),accountName:form.accountName.trim(),whatsapp:form.whatsapp.replace(/\D/g,""),deliveryZones:[
+      const data={bankName:form.bankName.trim(),accountNumber:form.accountNumber.trim(),accountName:form.accountName.trim(),whatsapp:form.whatsapp.replace(/\D/g,""),announcement:form.announcement.trim(),deliveryZones:[
         {id:"mainland",name:"Lagos Mainland",fee:Number(form.mainland)},
         {id:"island",name:"Lagos Island",fee:Number(form.island)},
         {id:"nationwide",name:"Outside Lagos",fee:Number(form.nationwide)}
@@ -314,6 +315,7 @@ function StoreSettings({ value, onSaved }) {
     </div>
     <label style={{display:"block",marginTop:12}}>Account name<input className="input-field" value={form.accountName} onChange={e=>set("accountName",e.target.value)}/></label>
     <label style={{display:"block",marginTop:12}}>WhatsApp number <small style={{color:"#888"}}>(country code, no +)</small><input className="input-field" value={form.whatsapp} onChange={e=>set("whatsapp",e.target.value)}/></label>
+    <label style={{display:"block",marginTop:12}}>Store announcement<input className="input-field" value={form.announcement} onChange={e=>set("announcement",e.target.value)} placeholder="Shown above the website header"/></label>
     <h3 style={{fontSize:15,margin:"24px 0 12px"}}>Delivery charges</h3>
     <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12}}>
       <label>Lagos Mainland<input className="input-field" type="number" value={form.mainland} onChange={e=>set("mainland",e.target.value)}/></label>

@@ -3,6 +3,7 @@
   "appName": "Bright Accessories",
   "webDir": "dist",
   "server": {
+    "url": "https://bright-accessories.vercel.app",
     "androidScheme": "https"
   },
   "android": {
