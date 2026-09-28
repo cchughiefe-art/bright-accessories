@@ -307,23 +307,24 @@ function StoreSettings({ value, onSaved }) {
       await setDoc(doc(db,"settings","store"),data,{merge:true}); onSaved(data); setMessage("Store settings saved. Website and APK will use them immediately.");
     } catch(e){setMessage("Could not save: "+e.message)} finally{setBusy(false)}
   };
-  return <div className="card" style={{padding:20,maxWidth:680,margin:"0 auto"}}><h2 style={{marginBottom:5}}>Store Settings</h2><p style={{color:"#777",fontSize:13,marginBottom:22}}>Update payment, support and delivery details without changing code.</p>
-    <h3 style={{fontSize:15,marginBottom:12}}>Bank transfer account</h3>
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+  return <div className="admin-settings-card">
+    <section className="admin-settings-section"><div className="admin-settings-title"><span>01</span><div><h3>Bank transfer account</h3><p>Account customers see during checkout.</p></div></div>
+    <div className="admin-settings-grid two">
       <label>Bank name<input className="input-field" value={form.bankName} onChange={e=>set("bankName",e.target.value)}/></label>
       <label>Account number<input className="input-field" inputMode="numeric" value={form.accountNumber} onChange={e=>set("accountNumber",e.target.value)}/></label>
     </div>
-    <label style={{display:"block",marginTop:12}}>Account name<input className="input-field" value={form.accountName} onChange={e=>set("accountName",e.target.value)}/></label>
-    <label style={{display:"block",marginTop:12}}>WhatsApp number <small style={{color:"#888"}}>(country code, no +)</small><input className="input-field" value={form.whatsapp} onChange={e=>set("whatsapp",e.target.value)}/></label>
-    <label style={{display:"block",marginTop:12}}>Store announcement<input className="input-field" value={form.announcement} onChange={e=>set("announcement",e.target.value)} placeholder="Shown above the website header"/></label>
-    <h3 style={{fontSize:15,margin:"24px 0 12px"}}>Delivery charges</h3>
-    <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12}}>
+    <label>Account name<input className="input-field" value={form.accountName} onChange={e=>set("accountName",e.target.value)}/></label></section>
+    <section className="admin-settings-section"><div className="admin-settings-title"><span>02</span><div><h3>Store contact</h3><p>Support number and storefront message.</p></div></div>
+    <label>WhatsApp number <small>(country code, no +)</small><input className="input-field" value={form.whatsapp} onChange={e=>set("whatsapp",e.target.value)}/></label>
+    <label>Store announcement<input className="input-field" value={form.announcement} onChange={e=>set("announcement",e.target.value)} placeholder="Shown above the website header"/></label></section>
+    <section className="admin-settings-section"><div className="admin-settings-title"><span>03</span><div><h3>Delivery charges</h3><p>Fees calculated automatically at checkout.</p></div></div>
+    <div className="admin-settings-grid three">
       <label>Lagos Mainland<input className="input-field" type="number" value={form.mainland} onChange={e=>set("mainland",e.target.value)}/></label>
       <label>Lagos Island<input className="input-field" type="number" value={form.island} onChange={e=>set("island",e.target.value)}/></label>
       <label>Outside Lagos<input className="input-field" type="number" value={form.nationwide} onChange={e=>set("nationwide",e.target.value)}/></label>
-    </div>
+    </div></section>
     {message&&<p style={{margin:"14px 0",fontSize:13,color:message.startsWith("Could")?"var(--red)":"var(--green)"}}>{message}</p>}
-    <button className="btn-gold" disabled={busy||!form.bankName||!form.accountNumber||!form.accountName} onClick={save} style={{width:"100%",marginTop:20}}>{busy?"Saving…":"Save Store Settings"}</button>
+    <div className="admin-settings-save"><button className="btn-gold" disabled={busy||!form.bankName||!form.accountNumber||!form.accountName} onClick={save}>{busy?"Saving…":"Save store settings"}</button></div>
   </div>;
 }
 
