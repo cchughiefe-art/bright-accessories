@@ -4,9 +4,27 @@ import {
 } from "firebase/firestore";
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { db, auth } from "../firebase";
+import "./Admin.css";
 
 const fmt = (n) => `₦${Number(n || 0).toLocaleString("en-NG")}`;
 const isImgBbUrl = (url = "") => /^https?:\/\/(?:i\.)?ibb\.co\//i.test(url) || /imgbb\.com/i.test(url);
+
+function AdminIcon({ name, size = 20 }) {
+  const paths = {
+    dashboard:<><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></>,
+    orders:<><path d="M6 3h12l2 5H4l2-5Z"/><path d="M5 8v13h14V8M9 12h6"/></>,
+    products:<><path d="m4 7 8-4 8 4-8 4-8-4Z"/><path d="M4 7v10l8 4 8-4V7M12 11v10"/></>,
+    settings:<><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6 1.7 1.7 0 0 0 10 3V2.8h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></>,
+    revenue:<><path d="M12 2v20M17 6.5c0-1.4-2.2-2.5-5-2.5S7 5.1 7 6.5 9.2 9 12 9s5 1.1 5 2.5-2.2 2.5-5 2.5-5 1.1-5 2.5S9.2 19 12 19s5-1.1 5-2.5"/></>,
+    profit:<><path d="M4 19V5M4 19h16M7 15l4-4 3 2 5-6"/></>,
+    clock:<><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></>,
+    check:<><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></>,
+    refresh:<><path d="M20 6v5h-5M4 18v-5h5"/><path d="M6.1 8a7 7 0 0 1 11.5-2L20 11M4 13l2.4 5a7 7 0 0 0 11.5-2"/></>,
+    external:<><path d="M14 4h6v6M20 4l-9 9"/><path d="M18 13v7H4V6h7"/></>,
+    logout:<><path d="M10 4H4v16h6M14 8l4 4-4 4M18 12H8"/></>,
+  };
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
+}
 
 async function uploadToCloudinary(source, publicId) {
   const token = await auth.currentUser?.getIdToken();
@@ -75,44 +93,29 @@ function Dashboard({ products, orders }) {
   const lowStock = products.filter(p => p.availableQuantity > 0 && p.availableQuantity < 5);
   const outOfStock = products.filter(p => p.availableQuantity <= 0);
   return (
-    <div style={{ marginBottom:24 }}>
-      <h2 style={{ fontSize:17, marginBottom:14 }}>Dashboard</h2>
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:16 }}>
+    <div className="admin-dashboard">
+      <div className="admin-page-heading"><div><span>OVERVIEW</span><h2>Business dashboard</h2><p>Track sales, orders and inventory from one place.</p></div><small>Live store data</small></div>
+      <div className="admin-stat-grid">
         {[
-          { label:"Total Revenue", value:fmt(revenue), color:"var(--green)", icon:"💰" },
-          { label:"Net Profit", value:fmt(profit), color:profit >= 0 ? "var(--green)" : "var(--red)", icon:"📈" },
-          { label:"Pending Orders", value:pending.length, color:"var(--orange)", icon:"⏳" },
-          { label:"Delivered", value:successful.length, color:"var(--green)", icon:"✅" },
+          { label:"Total revenue", value:fmt(revenue), tone:"green", icon:"revenue", note:"Completed orders" },
+          { label:"Net profit", value:fmt(profit), tone:profit >= 0 ? "blue" : "red", icon:"profit", note:"After recorded costs" },
+          { label:"Pending orders", value:pending.length, tone:"amber", icon:"clock", note:"Waiting for action" },
+          { label:"Delivered", value:successful.length, tone:"purple", icon:"check", note:"Successful orders" },
         ].map((stat) => (
-          <div key={stat.label} style={{ background:"white", borderRadius:12, padding:14, boxShadow:"0 2px 8px rgba(0,0,0,0.07)" }}>
-            <p style={{ fontSize:20, marginBottom:4 }}>{stat.icon}</p>
-            <p style={{ fontSize:18, fontWeight:700, color:stat.color }}>{stat.value}</p>
-            <p style={{ fontSize:11, color:"#888", marginTop:2 }}>{stat.label}</p>
+          <div className="admin-stat" key={stat.label}>
+            <div className={`admin-stat-icon ${stat.tone}`}><AdminIcon name={stat.icon}/></div>
+            <p>{stat.label}</p><strong>{stat.value}</strong><small>{stat.note}</small>
           </div>
         ))}
       </div>
-      {lowStock.length > 0 && (
-        <div style={{ background:"#FEF3C7", borderRadius:12, padding:14, marginBottom:12 }}>
-          <p style={{ fontWeight:700, color:"var(--orange)", fontSize:14, marginBottom:8 }}>
-            Low Stock Alert ({lowStock.length} products)
-          </p>
-          {lowStock.map(p => (
-            <p key={p.docId} style={{ fontSize:13, color:"#555", marginBottom:4 }}>
-              - {p.name} - {p.availableQuantity} units left
-            </p>
-          ))}
-        </div>
-      )}
-      {outOfStock.length > 0 && (
-        <div style={{ background:"#FEE2E2", borderRadius:12, padding:14 }}>
-          <p style={{ fontWeight:700, color:"var(--red)", fontSize:14, marginBottom:8 }}>
-            Out of Stock ({outOfStock.length} products)
-          </p>
-          {outOfStock.map(p => (
-            <p key={p.docId} style={{ fontSize:13, color:"#555", marginBottom:4 }}>- {p.name}</p>
-          ))}
-        </div>
-      )}
+      <div className="admin-panels">
+        <section><header><div><h3>Inventory health</h3><p>Products that need your attention</p></div><span>{products.length} products</span></header>
+          {!lowStock.length && !outOfStock.length ? <div className="admin-all-good"><AdminIcon name="check"/><div><b>Inventory looks good</b><p>No low-stock products right now.</p></div></div> : <div className="admin-stock-list">
+            {[...outOfStock,...lowStock].map(p=><div key={p.docId}><span className={p.availableQuantity <= 0 ? "out" : "low"}/><b>{p.name}</b><small>{p.availableQuantity <= 0 ? "Out of stock" : `${p.availableQuantity} left`}</small></div>)}
+          </div>}
+        </section>
+        <section><header><div><h3>Order summary</h3><p>Current fulfilment status</p></div></header><div className="admin-order-summary"><div><span>Pending</span><b>{pending.length}</b></div><div><span>Completed</span><b>{successful.length}</b></div><div><span>All orders</span><b>{orders.length}</b></div></div></section>
+      </div>
     </div>
   );
 }
@@ -443,57 +446,32 @@ export default function Admin() {
     : null;
 
   const tabs = [
-    { id:"dashboard", label:"Dashboard" },
-    { id:"orders", label:"Orders" + (pendingOrders.length ? " (" + pendingOrders.length + ")" : "") },
-    { id:"products", label:"Products (" + products.length + ")" },
-    { id:"settings", label:"Store Settings" },
+    { id:"dashboard", label:"Dashboard", icon:"dashboard" },
+    { id:"orders", label:"Orders", icon:"orders", count:pendingOrders.length },
+    { id:"products", label:"Products", icon:"products", count:products.length },
+    { id:"settings", label:"Store settings", icon:"settings" },
   ];
 
   return (
-    <div style={{ minHeight:"100vh", background:"var(--light)" }}>
-      <header style={{ background:"var(--dark)", padding:"16px 20px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-        <h1 style={{ color:"var(--gold)", fontSize:20 }}>Bright Admin</h1>
-        <div style={{ display:"flex", gap:12, alignItems:"center" }}>
-          <button onClick={loadData}
-            style={{ background:"transparent", border:"1px solid #555", color:"#aaa", borderRadius:6, padding:"6px 12px", fontSize:12, cursor:"pointer" }}>
-            Refresh
-          </button>
-          <a href="/" style={{ color:"#aaa", fontSize:13, textDecoration:"none" }}>Store</a>
-          <button onClick={() => signOut(auth)}
-            style={{ background:"transparent", border:"1px solid #555", color:"#aaa", borderRadius:6, padding:"6px 12px", fontSize:12 }}>
-            Sign out
-          </button>
-        </div>
-      </header>
-
-      <div style={{ display:"flex", background:"white", borderBottom:"1.5px solid var(--border)", overflowX:"auto" }}>
-        {tabs.map((t) => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            style={{
-              flex:1, padding:"13px 8px", border:"none", background:"transparent",
-              fontWeight:700, fontSize:13, cursor:"pointer", whiteSpace:"nowrap",
-              color: tab === t.id ? "var(--gold)" : "#888",
-              borderBottom: tab === t.id ? "3px solid var(--gold)" : "3px solid transparent",
-            }}>{t.label}</button>
-        ))}
-      </div>
-
-      <div style={{ padding:16 }}>
+    <div className="admin-shell">
+      <aside className="admin-sidebar">
+        <div className="admin-logo"><span className="admin-logo-mark">B</span><div><strong>Bright Admin</strong><small>Store management</small></div></div>
+        <nav className="admin-nav">{tabs.map(t=><button key={t.id} className={tab===t.id?"active":""} onClick={()=>setTab(t.id)}><AdminIcon name={t.icon}/><span>{t.label}</span>{t.count>0&&<b>{t.count}</b>}</button>)}</nav>
+        <div className="admin-sidebar-foot"><a href="/" target="_blank" rel="noreferrer"><AdminIcon name="external" size={18}/>View storefront</a><button onClick={()=>signOut(auth)}><AdminIcon name="logout" size={18}/>Sign out</button></div>
+      </aside>
+      <main className="admin-main">
+        <header className="admin-topbar"><div><h1>{tabs.find(t=>t.id===tab)?.label}</h1><p>Manage Bright Accessories</p></div><div className="admin-topbar-actions"><button onClick={loadData}><AdminIcon name="refresh" size={17}/><span>Refresh data</span></button><a className="admin-avatar" href="/" title="Open store">BA</a></div></header>
+        <div className="admin-content">
         {error && (
-          <div style={{ background:"#FEE2E2", color:"var(--red)", padding:14, borderRadius:10, marginBottom:16, fontSize:13 }}>
-            {error}
-            <button onClick={loadData} style={{ marginLeft:10, fontWeight:700, background:"none", border:"none", color:"var(--red)", cursor:"pointer" }}>Retry</button>
-          </div>
+          <div className="admin-error"><span>{error}</span><button onClick={loadData}>Retry</button></div>
         )}
         {loading ? (
-          <div style={{ textAlign:"center", padding:60 }}>
-            <div style={{ fontSize:32, marginBottom:12 }}>⏳</div>
-            <p style={{ color:"var(--gold)", fontWeight:600 }}>Loading...</p>
-          </div>
+          <div className="admin-loading"><AdminIcon name="refresh" size={28}/><p>Loading store data…</p></div>
         ) : tab === "dashboard" ? (
           <Dashboard products={products} orders={orders} />
         ) : tab === "orders" ? (
           <>
+            <div className="admin-page-heading"><div><span>FULFILMENT</span><h2>Customer orders</h2><p>Review payments and move orders through delivery.</p></div></div>
             <div style={{ marginBottom:16 }}>
               <input className="input-field" placeholder="Search by name, phone or product..."
                 value={orderSearch} onChange={(e) => setOrderSearch(e.target.value)} />
@@ -511,10 +489,7 @@ export default function Admin() {
               <>
                 <h2 style={{ marginBottom:14, fontSize:18 }}>Pending Orders ({pendingOrders.length})</h2>
                 {pendingOrders.length === 0 ? (
-                  <div style={{ textAlign:"center", padding:40, color:"#888" }}>
-                    <div style={{ fontSize:32, marginBottom:8 }}>📭</div>
-                    <p>No pending orders</p>
-                  </div>
+                  <div style={{ textAlign:"center", padding:40, color:"#888" }}><p>No pending orders</p></div>
                 ) : pendingOrders.map((o) => (
                   <OrderCard key={o.docId} o={o} onAction={handleOrderAction} fmt={fmt} />
                 ))}
@@ -525,14 +500,9 @@ export default function Admin() {
                       <div key={o.docId} style={{ background:"white", borderRadius:12, padding:14, marginBottom:10, border:"1px solid var(--border)" }}>
                         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
                           <span style={{ fontSize:14, fontWeight:600 }}>{o.orderRef || o.productName || o.items?.map(i=>i.name).join(", ")}</span>
-                          <span style={{
-                            fontSize:12, fontWeight:600, padding:"3px 10px", borderRadius:20,
-                            background: o.status === "successful" ? "#D1FAE5" : "#FEE2E2",
-                            color: o.status === "successful" ? "var(--green)" : "var(--red)"
-                          }}>{o.status}</span>
+                          <span style={{fontSize:12,fontWeight:600,padding:"3px 10px",borderRadius:20,background:o.status==="successful"?"#D1FAE5":"#FEE2E2",color:o.status==="successful"?"var(--green)":"var(--red)"}}>{o.status}</span>
                         </div>
-                        <p style={{ fontSize:13, color:"#666" }}>{o.customerName || o.customer?.name} - {o.customerPhone || o.customer?.phone}</p>
-                        <p style={{ fontSize:13, color:"var(--gold)", fontWeight:600 }}>{fmt(o.total)}</p>
+                        <p style={{ fontSize:13, color:"#666" }}>{o.customerName || o.customer?.name} - {o.customerPhone || o.customer?.phone}</p><p style={{ fontSize:13, color:"var(--gold)", fontWeight:600 }}>{fmt(o.total)}</p>
                       </div>
                     ))}
                   </>
@@ -541,18 +511,14 @@ export default function Admin() {
             )}
           </>
         ) : tab === "settings" ? (
-          <StoreSettings value={settings} onSaved={setSettings} />
+          <><div className="admin-page-heading"><div><span>CONFIGURATION</span><h2>Store settings</h2><p>Payment, support and delivery details.</p></div></div><StoreSettings value={settings} onSaved={setSettings} /></>
         ) : (
           <>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:10, marginBottom:14, flexWrap:"wrap" }}>
-              <h2 style={{ fontSize:18 }}>Products ({products.length})</h2>
+            <div className="admin-page-heading"><div><span>CATALOGUE</span><h2>Products</h2><p>Manage inventory, pricing and product photos.</p></div></div>
+            <div style={{ display:"flex", justifyContent:"flex-end", alignItems:"center", gap:10, marginBottom:14, flexWrap:"wrap" }}>
               <div style={{display:"flex",gap:8}}>
-                <button className="btn-outline" style={{ padding:"10px 14px", fontSize:13 }} disabled={migration.running}
-                  onClick={migrateImgBbImages}>
-                  {migration.running ? `Moving ${migration.done}/${migration.total}…` : `Move ImgBB images (${products.filter((p) => isImgBbUrl(p.imageUrl)).length})`}
-                </button>
-                <button className="btn-gold" style={{ padding:"10px 18px", fontSize:14 }}
-                  onClick={() => { setEditing(null); setShowForm(true); }}>+ Add</button>
+                <button className="btn-outline" style={{ padding:"10px 14px", fontSize:13 }} disabled={migration.running} onClick={migrateImgBbImages}>{migration.running ? `Moving ${migration.done}/${migration.total}…` : `Move ImgBB images (${products.filter((p) => isImgBbUrl(p.imageUrl)).length})`}</button>
+                <button className="btn-gold" style={{ padding:"10px 18px", fontSize:14 }} onClick={() => { setEditing(null); setShowForm(true); }}>+ Add product</button>
               </div>
             </div>
             {migration.error && <div style={{background:migration.error.startsWith("Stopped")?"#FEE2E2":"#D1FAE5",color:migration.error.startsWith("Stopped")?"var(--red)":"var(--green)",padding:12,borderRadius:9,marginBottom:14,fontSize:13}}>{migration.error}</div>}
@@ -621,7 +587,9 @@ export default function Admin() {
             ))}
           </>
         )}
-      </div>
+        </div>
+      </main>
+      <nav className="admin-mobile-nav">{tabs.map(t=><button key={t.id} className={tab===t.id?"active":""} onClick={()=>setTab(t.id)}><AdminIcon name={t.icon}/><span>{t.label}</span></button>)}</nav>
     </div>
   );
 }
