@@ -1,19 +1,17 @@
 import crypto from "node:crypto";
 
-const FIREBASE_API_KEY = process.env.VITE_FIREBASE_API_KEY || "AIzaSyBS-6-QNtNvS6AwPIn4zorzEhqSeDZSZiQ";
-const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "cchughiefe@gmail.com").toLowerCase();
-
 async function authenticate(request) {
   const token = request.headers.authorization?.replace(/^Bearer\s+/i, "");
   if (!token) throw new Error("Missing administrator session");
 
+  // Let the deployed Firestore rules make the authorization decision. The
+  // orders collection is admin-only, so a successful one-item query proves
+  // this Firebase session has the same access as the admin dashboard.
   const response = await fetch(
-    `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${FIREBASE_API_KEY}`,
-    { method:"POST", headers:{ "content-type":"application/json" }, body:JSON.stringify({ idToken:token }) },
+    "https://firestore.googleapis.com/v1/projects/bright-accessories/databases/(default)/documents/orders?pageSize=1",
+    { headers:{ authorization:`Bearer ${token}` } },
   );
-  const data = await response.json();
-  const email = data.users?.[0]?.email?.toLowerCase();
-  if (!response.ok || email !== ADMIN_EMAIL) throw new Error("Administrator access required");
+  if (!response.ok) throw new Error("Administrator access required. Sign out and sign in again.");
 }
 
 const safePublicId = (value) => String(value || "image")
