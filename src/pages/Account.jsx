@@ -52,9 +52,17 @@ function AuthForm() {
         const result = await createUserWithEmailAndPassword(auth, email.trim(), password);
         if (name.trim()) await updateProfile(result.user, { displayName: name.trim() });
         await sendEmailVerification(result.user);
+        if (new URLSearchParams(window.location.search).get("next") === "checkout") {
+          window.location.replace("/?checkout=1");
+          return;
+        }
         setMessage("Account created. We sent a verification link to your email.");
       } else {
         await signInWithEmailAndPassword(auth, email.trim(), password);
+        if (new URLSearchParams(window.location.search).get("next") === "checkout") {
+          window.location.replace("/?checkout=1");
+          return;
+        }
       }
     } catch (err) {
       const friendly = {

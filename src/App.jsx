@@ -8,6 +8,7 @@ import {
   serverTimestamp,
   setDoc,
 } from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "./firebase";
 
 const money = (n) => `₦${Number(n || 0).toLocaleString("en-NG")}`;
@@ -383,6 +384,11 @@ function Checkout({ cart, back, complete, settings }) {
     setStep(2);
   };
   const submit = async () => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      window.location.href = "/account?next=checkout";
+      return;
+    }
     if (form.payment === "transfer" && !receipt)
       return setError("Upload your transfer receipt before placing the order.");
     setBusy(true);
@@ -397,7 +403,7 @@ function Checkout({ cart, back, complete, settings }) {
       }
       const order = {
         orderRef,
-        userId: auth.currentUser?.uid || "",
+        userId: currentUser.uid,
         items: cart.map((i) => ({
           productId: i.id,
           name: i.name,
@@ -408,7 +414,7 @@ function Checkout({ cart, back, complete, settings }) {
         customer: {
           name: form.name.trim(),
           phone: form.phone.trim(),
-          email: form.email.trim(),
+          email: currentUser.email || form.email.trim(),
           address: form.address.trim(),
           state: form.state.trim(),
           zone: form.zone,
@@ -485,11 +491,11 @@ function Checkout({ cart, back, complete, settings }) {
                 </label>
               </div>
               <label>
-                Email <em>(optional)</em>
+                Account email
                 <input
                   type="email"
                   value={form.email}
-                  onChange={(e) => set("email", e.target.value)}
+                  readOnly
                 />
               </label>
               <label>
@@ -699,7 +705,8 @@ export default function App() {
     [tracking, setTracking] = useState(false),
     [selected, setSelected] = useState(null),
     [order, setOrder] = useState(null),
-    [menu, setMenu] = useState(false);
+    [menu, setMenu] = useState(false),
+    [customer, setCustomer] = useState(undefined);
   const [settings, setSettings] = useState({
     deliveryZones: defaultZones,
     bankName: "",
@@ -722,6 +729,15 @@ export default function App() {
         return [];
       }
     });
+  useEffect(() => {
+    return onAuthStateChanged(auth, setCustomer);
+  }, []);
+  useEffect(() => {
+    if (customer && cart.length && new URLSearchParams(window.location.search).get("checkout") === "1") {
+      setCheckout(true);
+      window.history.replaceState({}, "", "/");
+    }
+  }, [customer, cart.length]);
   useEffect(() => {
     getDocs(collection(db, "products"))
       .then((s) =>
@@ -1038,7 +1054,8 @@ export default function App() {
           close={() => setCartOpen(false)}
           checkout={() => {
             setCartOpen(false);
-            setCheckout(true);
+            if (customer) setCheckout(true);
+            else window.location.href = "/account?next=checkout";
           }}
         />
       )}

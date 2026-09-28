@@ -10,7 +10,10 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
     match /orders/{orderId} {
-      allow create: if request.resource.data.items is list
+      allow create: if request.auth != null
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.customer.email == request.auth.token.email
+        && request.resource.data.items is list
         && request.resource.data.items.size() > 0
         && request.resource.data.items.size() <= 30
         && request.resource.data.total is number
