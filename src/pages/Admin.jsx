@@ -57,8 +57,15 @@ function LoginScreen({ onLogin }) {
   const [busy, setBusy] = useState(false);
   const login = async () => {
     setBusy(true); setErr("");
-    try { await signInWithEmailAndPassword(auth, email.trim(), pw); onLogin(); }
-    catch { setErr("Email or password is incorrect."); }
+    try {
+      const result = await signInWithEmailAndPassword(auth, email.trim(), pw);
+      if (result.user.email?.toLowerCase() !== "cchughiefe@gmail.com") {
+        await signOut(auth);
+        throw new Error("not-admin");
+      }
+      onLogin();
+    }
+    catch { setErr("Email or password is incorrect, or this is not an administrator account."); }
     finally { setBusy(false); }
   };
   return (
@@ -360,7 +367,7 @@ export default function Admin() {
     setLoading(false);
   };
 
-  useEffect(() => onAuthStateChanged(auth, (user) => setAuthed(Boolean(user))), []);
+  useEffect(() => onAuthStateChanged(auth, (user) => setAuthed(user?.email?.toLowerCase() === "cchughiefe@gmail.com")), []);
   useEffect(() => { if (authed) loadData(); }, [authed]);
 
   const handleSaveProduct = async (data) => {

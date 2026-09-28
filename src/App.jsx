@@ -857,6 +857,7 @@ export default function App() {
             Shop
           </a>
           <a href="/account">My account</a>
+          <a href="/admin">Admin login</a>
           <button
             onClick={() => {
               setTracking(true);
@@ -1043,6 +1044,7 @@ export default function App() {
           <a href="#shop">Shop</a>
           <button onClick={() => setTracking(true)}>Track an order</button>
           <a href={`https://wa.me/${settings.whatsapp || "234"}`}>Support</a>
+          <a href="/admin">Admin login</a>
         </nav>
         <small>© {new Date().getFullYear()} Bright Accessories</small>
       </footer>

@@ -167,7 +167,7 @@ export default function Account() {
 
   return (
     <div className="account-page">
-      <header className="account-topbar"><a className="account-brand" href="/">BRIGHT <span>ACCESSORIES</span></a><nav><a href="/">Store</a><button onClick={() => signOut(auth)}>Sign out</button></nav></header>
+      <header className="account-topbar"><a className="account-brand" href="/">BRIGHT <span>ACCESSORIES</span></a><nav><a href="/">Store</a><a href="/admin">Admin login</a><button onClick={() => signOut(auth)}>Sign out</button></nav></header>
       <main className="account-shell">
         <section className="account-heading"><div><p className="eyebrow">MY ACCOUNT</p><h1>Hello, {firstName}.</h1><p>Track purchases from order received to delivery.</p></div><div className="profile-chip"><b>{(user.displayName || user.email || "B").slice(0, 1).toUpperCase()}</b><span>{user.displayName || "Bright customer"}<small>{user.email}</small></span></div></section>
         {!user.emailVerified && <aside className="verification"><div><b>Verify your email</b><p>Verify it to connect older orders placed with {user.email}.</p></div><button disabled={verificationSent} onClick={async () => { await sendEmailVerification(user); setVerificationSent(true); }}>{verificationSent ? "Email sent" : "Send verification"}</button></aside>}
