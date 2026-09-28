@@ -6,7 +6,32 @@ import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from "firebas
 import { db, auth } from "../firebase";
 
 const fmt = (n) => `₦${Number(n || 0).toLocaleString("en-NG")}`;
-const IMGBB_KEY = "d025f246af80b099e6744a75bdfc8d30";
+const isImgBbUrl = (url = "") => /^https?:\/\/(?:i\.)?ibb\.co\//i.test(url) || /imgbb\.com/i.test(url);
+
+async function uploadToCloudinary(source, publicId) {
+  const token = await auth.currentUser?.getIdToken();
+  if (!token) throw new Error("Please sign in again");
+  const signatureResponse = await fetch("/api/cloudinary-signature", {
+    method:"POST",
+    headers:{ "content-type":"application/json", authorization:`Bearer ${token}` },
+    body:JSON.stringify({ publicId }),
+  });
+  const signed = await signatureResponse.json();
+  if (!signatureResponse.ok) throw new Error(signed.error || "Cloudinary authorization failed");
+
+  const body = new FormData();
+  body.append("file", source);
+  body.append("api_key", signed.apiKey);
+  body.append("timestamp", String(signed.timestamp));
+  body.append("signature", signed.signature);
+  body.append("folder", signed.folder);
+  body.append("public_id", signed.publicId);
+  body.append("overwrite", signed.overwrite);
+  const uploadResponse = await fetch(`https://api.cloudinary.com/v1_1/${signed.cloudName}/image/upload`, { method:"POST", body });
+  const uploaded = await uploadResponse.json();
+  if (!uploadResponse.ok || !uploaded.secure_url) throw new Error(uploaded.error?.message || "Image upload failed");
+  return uploaded;
+}
 function LoginScreen({ onLogin }) {
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
@@ -122,13 +147,10 @@ function ProductForm({ initial, onSave, onCancel }) {
     if (!imgFile) return form.imageUrl || "";
     setUploading(true);
     try {
-      const fd = new FormData();
-      fd.append("image", imgFile);
-      const res = await fetch("https://api.imgbb.com/1/upload?key=" + IMGBB_KEY, { method:"POST", body:fd });
-      const data = await res.json();
+      const publicId = `${form.name || "product"}-${Date.now()}`;
+      const data = await uploadToCloudinary(imgFile, publicId);
       setUploading(false);
-      if (data.success) return data.data.url;
-      throw new Error(data.error?.message || "Upload failed");
+      return data.secure_url;
     } catch (e) {
       setUploading(false);
       throw e;
@@ -312,6 +334,7 @@ export default function Admin() {
   const [orderSearch, setOrderSearch] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [settings, setSettings] = useState({});
+  const [migration, setMigration] = useState({ running:false, done:0, total:0, error:"" });
 
   const loadData = async () => {
     setLoading(true); setError("");
@@ -352,6 +375,35 @@ export default function Admin() {
       setConfirmDelete(null);
       await loadData();
     } catch (e) { alert("Failed to delete: " + e.message); }
+  };
+
+  const migrateImgBbImages = async () => {
+    const pending = products.filter((product) => isImgBbUrl(product.imageUrl));
+    if (!pending.length) {
+      setMigration({ running:false, done:0, total:0, error:"All product images are already on Cloudinary." });
+      return;
+    }
+    setMigration({ running:true, done:0, total:pending.length, error:"" });
+    let done = 0;
+    try {
+      for (const product of pending) {
+        const uploaded = await uploadToCloudinary(product.imageUrl, `product-${product.docId}`);
+        await updateDoc(doc(db, "products", product.docId), {
+          imageUrl:uploaded.secure_url,
+          imagePublicId:uploaded.public_id,
+          imageProvider:"cloudinary",
+          legacyImageUrl:product.imageUrl,
+          imageMigratedAt:serverTimestamp(),
+        });
+        done += 1;
+        setMigration({ running:true, done, total:pending.length, error:"" });
+      }
+      await loadData();
+      setMigration({ running:false, done, total:pending.length, error:"Migration complete. All product images now use Cloudinary." });
+    } catch (error) {
+      await loadData();
+      setMigration({ running:false, done, total:pending.length, error:`Stopped after ${done} image${done === 1 ? "" : "s"}: ${error.message}` });
+    }
   };
 
   const handleOrderAction = async (order, action) => {
@@ -492,11 +544,18 @@ export default function Admin() {
           <StoreSettings value={settings} onSaved={setSettings} />
         ) : (
           <>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:10, marginBottom:14, flexWrap:"wrap" }}>
               <h2 style={{ fontSize:18 }}>Products ({products.length})</h2>
-              <button className="btn-gold" style={{ padding:"10px 18px", fontSize:14 }}
-                onClick={() => { setEditing(null); setShowForm(true); }}>+ Add</button>
+              <div style={{display:"flex",gap:8}}>
+                <button className="btn-outline" style={{ padding:"10px 14px", fontSize:13 }} disabled={migration.running}
+                  onClick={migrateImgBbImages}>
+                  {migration.running ? `Moving ${migration.done}/${migration.total}…` : `Move ImgBB images (${products.filter((p) => isImgBbUrl(p.imageUrl)).length})`}
+                </button>
+                <button className="btn-gold" style={{ padding:"10px 18px", fontSize:14 }}
+                  onClick={() => { setEditing(null); setShowForm(true); }}>+ Add</button>
+              </div>
             </div>
+            {migration.error && <div style={{background:migration.error.startsWith("Stopped")?"#FEE2E2":"#D1FAE5",color:migration.error.startsWith("Stopped")?"var(--red)":"var(--green)",padding:12,borderRadius:9,marginBottom:14,fontSize:13}}>{migration.error}</div>}
             {showForm && (
               <div className="overlay" onClick={() => { setShowForm(false); setEditing(null); }}>
                 <div style={{ width:"100%", maxWidth:480, maxHeight:"90vh", overflowY:"auto" }}

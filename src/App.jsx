@@ -4,6 +4,9 @@ import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { db, storage } from "./firebase";
 
 const money = (n) => `₦${Number(n || 0).toLocaleString("en-NG")}`;
+const fastImage = (url, width = 640) => url?.includes("res.cloudinary.com")
+  ? url.replace("/image/upload/", `/image/upload/f_auto,q_auto,c_limit,w_${width}/`)
+  : url;
 const defaultZones = [
   { id: "mainland", name: "Lagos Mainland", fee: 2500 },
   { id: "island", name: "Lagos Island", fee: 3500 },
@@ -28,7 +31,7 @@ function Icon({ name, size = 20 }) {
 function Product({ item, add }) {
   const stock = Number(item.availableQuantity || 0);
   return <article className="product-card">
-    <div className="product-image">{item.imageUrl ? <img src={item.imageUrl} alt={item.name} loading="lazy"/> : <Icon name="bag" size={40}/>} {item.featured && <span className="pill">Featured</span>}</div>
+    <div className="product-image">{item.imageUrl ? <img src={fastImage(item.imageUrl)} alt={item.name} loading="lazy"/> : <Icon name="bag" size={40}/>} {item.featured && <span className="pill">Featured</span>}</div>
     <div className="product-copy"><small>{item.category || "Accessories"}</small><h3>{item.name}</h3><p>{item.description || "Quality accessory, ready for fast delivery."}</p>
       <div><strong>{money(item.sellingPrice)}</strong><button disabled={!stock} onClick={() => add(item)}>{stock ? <><Icon name="plus"/> Add</> : "Sold out"}</button></div>
       {stock > 0 && stock < 6 && <em>Only {stock} left</em>}
@@ -40,14 +43,14 @@ function Cart({ cart, products, change, close, checkout }) {
   const subtotal = cart.reduce((s, i) => s + i.sellingPrice * i.quantity, 0);
   return <div className="scrim" onMouseDown={close}><aside className="drawer" onMouseDown={e => e.stopPropagation()}>
     <header><div><small>YOUR SELECTION</small><h2>Shopping bag</h2></div><button className="round" onClick={close}><Icon name="close"/></button></header>
-    <section>{cart.length ? cart.map(i => <div className="cart-line" key={i.id}>{i.imageUrl ? <img src={i.imageUrl} alt=""/> : <span><Icon name="bag"/></span>}<div><h3>{i.name}</h3><strong>{money(i.sellingPrice)}</strong><nav><button onClick={() => change(i.id, i.quantity - 1)}><Icon name="minus" size={14}/></button><b>{i.quantity}</b><button onClick={() => change(i.id, Math.min(i.quantity + 1, products.find(p => p.id === i.id)?.availableQuantity || i.quantity))}><Icon name="plus" size={14}/></button></nav></div><button className="remove" onClick={() => change(i.id, 0)}>Remove</button></div>) : <div className="empty"><Icon name="bag" size={44}/><h3>Your bag is empty</h3><p>Add something you love.</p><button className="primary" onClick={close}>Continue shopping</button></div>}</section>
+    <section>{cart.length ? cart.map(i => <div className="cart-line" key={i.id}>{i.imageUrl ? <img src={fastImage(i.imageUrl, 180)} alt=""/> : <span><Icon name="bag"/></span>}<div><h3>{i.name}</h3><strong>{money(i.sellingPrice)}</strong><nav><button onClick={() => change(i.id, i.quantity - 1)}><Icon name="minus" size={14}/></button><b>{i.quantity}</b><button onClick={() => change(i.id, Math.min(i.quantity + 1, products.find(p => p.id === i.id)?.availableQuantity || i.quantity))}><Icon name="plus" size={14}/></button></nav></div><button className="remove" onClick={() => change(i.id, 0)}>Remove</button></div>) : <div className="empty"><Icon name="bag" size={44}/><h3>Your bag is empty</h3><p>Add something you love.</p><button className="primary" onClick={close}>Continue shopping</button></div>}</section>
     {!!cart.length && <footer><div><span>Subtotal</span><strong>{money(subtotal)}</strong></div><p>Delivery is calculated at checkout.</p><button className="primary wide" onClick={checkout}>Proceed to checkout <Icon name="arrow"/></button></footer>}
   </aside></div>;
 }
 
 function Summary({ cart, delivery }) {
   const subtotal = cart.reduce((s, i) => s + i.sellingPrice * i.quantity, 0);
-  return <aside className="summary"><small>ORDER SUMMARY</small>{cart.map(i => <div className="summary-line" key={i.id}>{i.imageUrl ? <img src={i.imageUrl} alt=""/> : <span><Icon name="bag"/></span>}<div><b>{i.name}</b><small>Qty {i.quantity}</small></div><strong>{money(i.sellingPrice * i.quantity)}</strong></div>)}<dl><div><dt>Subtotal</dt><dd>{money(subtotal)}</dd></div><div><dt>Delivery</dt><dd>{money(delivery)}</dd></div><div><dt>Total</dt><dd>{money(subtotal + delivery)}</dd></div></dl></aside>;
+  return <aside className="summary"><small>ORDER SUMMARY</small>{cart.map(i => <div className="summary-line" key={i.id}>{i.imageUrl ? <img src={fastImage(i.imageUrl, 160)} alt=""/> : <span><Icon name="bag"/></span>}<div><b>{i.name}</b><small>Qty {i.quantity}</small></div><strong>{money(i.sellingPrice * i.quantity)}</strong></div>)}<dl><div><dt>Subtotal</dt><dd>{money(subtotal)}</dd></div><div><dt>Delivery</dt><dd>{money(delivery)}</dd></div><div><dt>Total</dt><dd>{money(subtotal + delivery)}</dd></div></dl></aside>;
 }
 
 function Checkout({ cart, back, complete, settings }) {
