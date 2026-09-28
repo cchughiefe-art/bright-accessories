@@ -17,7 +17,11 @@ service cloud.firestore {
         && request.resource.data.total > 0
         && request.resource.data.customer.phone is string
         && request.resource.data.orderRef is string;
-      allow read: if isAdmin();
+      allow read: if isAdmin()
+        || (request.auth != null && resource.data.userId == request.auth.uid)
+        || (request.auth != null
+          && request.auth.token.email_verified == true
+          && resource.data.customer.email == request.auth.token.email);
       allow update, delete: if isAdmin();
     }
     match /publicOrders/{orderRef} {
