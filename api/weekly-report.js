@@ -102,7 +102,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         sender: { name: "Bright Accessories", email: "cchughiefe@gmail.com" },
-        to: [{ email: "tribaluncle@gmail.com", name: "Bright Admin" }],
+        to: [{ email: process.env.ORDER_ALERT_EMAIL || "tribaluncle@gmail.com", name: "Bright Admin" }],
         subject: `Weekly Report - Profit: ${fmt(profit)}`,
         htmlContent: html,
       }),
