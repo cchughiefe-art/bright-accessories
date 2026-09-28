@@ -7,6 +7,14 @@ export default async function handler(req, res) {
   if (!process.env.BREVO_API_KEY) return res.status(503).json({ error:"Email is not configured" });
   const o = req.body || {};
   if (!Array.isArray(o.items) || !o.customer || !Number.isFinite(Number(o.total))) return res.status(400).json({ error:"Invalid order" });
+  try {
+    const customer = await authenticateCustomer(req);
+    if (customer.uid !== o.userId || customer.email !== String(o.customer.email || "").toLowerCase()) {
+      return res.status(403).json({ error:"Order customer does not match signed-in account" });
+    }
+  } catch (error) {
+    return res.status(401).json({ error:error.message });
+  }
   const items = o.items.map(i => `<tr><td style="padding:6px 12px">${escapeHtml(i.name)} × ${Number(i.quantity)}</td><td style="padding:6px 12px">₦${Number(i.price*i.quantity).toLocaleString()}</td></tr>`).join("");
   const html = `<h2>New Bright Accessories order</h2><p><b>Reference:</b> ${escapeHtml(o.orderRef)}</p><table style="border-collapse:collapse;font-family:sans-serif;font-size:14px">${items}</table><p><b>Total:</b> ₦${Number(o.total).toLocaleString()}</p><p><b>Customer:</b> ${escapeHtml(o.customer.name)}<br><b>Phone:</b> ${escapeHtml(o.customer.phone)}<br><b>Address:</b> ${escapeHtml(o.customer.address)}, ${escapeHtml(o.customer.state)}</p><p><b>Payment:</b> ${o.paymentMethod === "transfer" ? "Bank transfer, receipt awaiting verification" : "Cash on delivery"}</p>`;
   try {
@@ -25,3 +33,4 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok:true });
   } catch { return res.status(502).json({ error:"Notification failed" }); }
 }
+import { authenticateCustomer } from "../lib/firebase-auth.js";

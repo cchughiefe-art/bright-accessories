@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { App as CapacitorApp } from "@capacitor/app";
 import { Browser } from "@capacitor/browser";
 import { Capacitor } from "@capacitor/core";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "../firebase";
 import "./AppUpdate.css";
 
 const parts = (version = "0") => String(version).split(".").map((value) => Number.parseInt(value, 10) || 0);
@@ -27,7 +29,18 @@ export default function AppUpdate() {
         if (!response.ok) throw new Error("Update information unavailable");
         return response.json();
       }),
-    ]).then(([app, release]) => {
+      getDoc(doc(db, "settings", "store")).catch(() => null),
+    ]).then(([app, fallback, settingsSnapshot]) => {
+      const settings = settingsSnapshot?.exists?.() ? settingsSnapshot.data() : {};
+      const release = {
+        ...fallback,
+        latestVersion: settings.apkLatestVersion || fallback.latestVersion,
+        minimumVersion: settings.apkMinimumVersion || fallback.minimumVersion,
+        required: settings.apkUpdateRequired ?? fallback.required,
+        apkUrl: settings.apkDownloadUrl || fallback.apkUrl,
+        message: settings.apkUpdateMessage || fallback.message,
+        releaseNotes: settings.apkReleaseNotes ? String(settings.apkReleaseNotes).split("\n").filter(Boolean) : fallback.releaseNotes,
+      };
       const dismissed = localStorage.getItem("bright-dismissed-update");
       const required = release.required || newerThan(release.minimumVersion, app.version);
       if (active && newerThan(release.latestVersion, app.version) && (required || dismissed !== release.latestVersion)) {

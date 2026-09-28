@@ -300,13 +300,19 @@ function StoreSettings({ value, onSaved }) {
     mainland:value.deliveryZones?.find(z=>z.id==="mainland")?.fee || 2500,
     island:value.deliveryZones?.find(z=>z.id==="island")?.fee || 3500,
     nationwide:value.deliveryZones?.find(z=>z.id==="nationwide")?.fee || 5000,
+    apkLatestVersion:value.apkLatestVersion || "1.0.0",
+    apkMinimumVersion:value.apkMinimumVersion || "1.0.0",
+    apkDownloadUrl:value.apkDownloadUrl || "https://github.com/cchughiefe-art/bright-accessories/releases/latest/download/bright-accessories.apk",
+    apkUpdateMessage:value.apkUpdateMessage || "A newer, improved version of Bright Accessories is ready.",
+    apkReleaseNotes:value.apkReleaseNotes || "Performance improvements\nBug fixes and security improvements",
+    apkUpdateRequired:Boolean(value.apkUpdateRequired),
   });
   const [busy,setBusy]=useState(false), [message,setMessage]=useState("");
   const set=(k,v)=>setForm(f=>({...f,[k]:v}));
   const save=async()=>{
     setBusy(true);setMessage("");
     try {
-      const data={bankName:form.bankName.trim(),accountNumber:form.accountNumber.trim(),accountName:form.accountName.trim(),whatsapp:form.whatsapp.replace(/\D/g,""),announcement:form.announcement.trim(),deliveryZones:[
+      const data={bankName:form.bankName.trim(),accountNumber:form.accountNumber.trim(),accountName:form.accountName.trim(),whatsapp:form.whatsapp.replace(/\D/g,""),announcement:form.announcement.trim(),apkLatestVersion:form.apkLatestVersion.trim(),apkMinimumVersion:form.apkMinimumVersion.trim(),apkDownloadUrl:form.apkDownloadUrl.trim(),apkUpdateMessage:form.apkUpdateMessage.trim(),apkReleaseNotes:form.apkReleaseNotes.trim(),apkUpdateRequired:form.apkUpdateRequired,deliveryZones:[
         {id:"mainland",name:"Lagos Mainland",fee:Number(form.mainland)},
         {id:"island",name:"Lagos Island",fee:Number(form.island)},
         {id:"nationwide",name:"Outside Lagos",fee:Number(form.nationwide)}
@@ -330,6 +336,15 @@ function StoreSettings({ value, onSaved }) {
       <label>Lagos Island<input className="input-field" type="number" value={form.island} onChange={e=>set("island",e.target.value)}/></label>
       <label>Outside Lagos<input className="input-field" type="number" value={form.nationwide} onChange={e=>set("nationwide",e.target.value)}/></label>
     </div></section>
+    <section className="admin-settings-section"><div className="admin-settings-title"><span>04</span><div><h3>Android app updates</h3><p>Control update notices shown inside installed APKs.</p></div></div>
+    <div className="admin-settings-grid two">
+      <label>Latest APK version<input className="input-field" value={form.apkLatestVersion} onChange={e=>set("apkLatestVersion",e.target.value)} placeholder="1.1.0"/></label>
+      <label>Minimum allowed version<input className="input-field" value={form.apkMinimumVersion} onChange={e=>set("apkMinimumVersion",e.target.value)} placeholder="1.0.0"/></label>
+    </div>
+    <label>Direct APK URL<input className="input-field" value={form.apkDownloadUrl} onChange={e=>set("apkDownloadUrl",e.target.value)}/></label>
+    <label>Update message<input className="input-field" value={form.apkUpdateMessage} onChange={e=>set("apkUpdateMessage",e.target.value)}/></label>
+    <label>Release notes <small>(one per line)</small><textarea className="input-field" rows="4" value={form.apkReleaseNotes} onChange={e=>set("apkReleaseNotes",e.target.value)}/></label>
+    <label style={{display:"flex",alignItems:"center",gap:10}}><input type="checkbox" checked={form.apkUpdateRequired} onChange={e=>set("apkUpdateRequired",e.target.checked)}/> Make this update compulsory</label></section>
     {message&&<p style={{margin:"14px 0",fontSize:13,color:message.startsWith("Could")?"var(--red)":"var(--green)"}}>{message}</p>}
     <div className="admin-settings-save"><button className="btn-gold" disabled={busy||!form.bankName||!form.accountNumber||!form.accountName} onClick={save}>{busy?"Saving…":"Save store settings"}</button></div>
   </div>;
@@ -455,6 +470,31 @@ export default function Admin() {
       )
     : null;
 
+  const exportOrders = () => {
+    const quote = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+    const rows = [["Reference","Date","Customer","Phone","Email","Items","Payment","Status","Subtotal","Delivery","Total"]];
+    orders.forEach((order) => rows.push([
+      order.orderRef,
+      order.createdAt?.toDate?.().toISOString() || "",
+      order.customer?.name || order.customerName || "",
+      order.customer?.phone || order.customerPhone || "",
+      order.customer?.email || "",
+      order.items?.map((item) => `${item.name} x${item.quantity}`).join("; ") || order.productName || "",
+      order.paymentMethod || "",
+      order.status || "",
+      order.subtotal || "",
+      order.deliveryFee || "",
+      order.total || "",
+    ]));
+    const blob = new Blob([rows.map((row) => row.map(quote).join(",")).join("\n")], { type:"text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `bright-orders-${new Date().toISOString().slice(0,10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   const tabs = [
     { id:"dashboard", label:"Dashboard", icon:"dashboard" },
     { id:"orders", label:"Orders", icon:"orders", count:pendingOrders.length },
@@ -481,7 +521,7 @@ export default function Admin() {
           <Dashboard products={products} orders={orders} />
         ) : tab === "orders" ? (
           <>
-            <div className="admin-page-heading"><div><span>FULFILMENT</span><h2>Customer orders</h2><p>Review payments and move orders through delivery.</p></div></div>
+            <div className="admin-page-heading"><div><span>FULFILMENT</span><h2>Customer orders</h2><p>Review payments and move orders through delivery.</p></div><button className="btn-outline" onClick={exportOrders}>Export CSV</button></div>
             <div style={{ marginBottom:16 }}>
               <input className="input-field" placeholder="Search by name, phone or product..."
                 value={orderSearch} onChange={(e) => setOrderSearch(e.target.value)} />

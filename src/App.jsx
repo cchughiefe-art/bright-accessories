@@ -93,7 +93,7 @@ function ProductCard({ item, add, open, favourite, toggleFavourite }) {
       </button>
       <button className="product-image" onClick={() => open(item)}>
         {item.imageUrl ? (
-          <img src={fastImage(item.imageUrl)} alt={item.name} loading="lazy" />
+          <img src={fastImage(item.imageUrl)} alt={item.name} loading="lazy" decoding="async" width="720" height="720" />
         ) : (
           <Icon name="bag" size={42} />
         )}{" "}
@@ -328,9 +328,11 @@ function Summary({ cart, delivery }) {
 }
 
 async function uploadReceipt(file, orderRef) {
+  const token = await auth.currentUser?.getIdToken();
+  if (!token) throw Error("Please sign in before uploading a receipt");
   const sign = await fetch("/api/receipt-signature", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
     body: JSON.stringify({ orderRef }),
   });
   const auth = await sign.json();
@@ -441,7 +443,7 @@ function Checkout({ cart, back, complete, settings }) {
       });
       fetch("/api/order-alert", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", authorization: `Bearer ${await currentUser.getIdToken()}` },
         body: JSON.stringify(order),
       }).catch(() => {});
       complete(order);
@@ -694,8 +696,11 @@ function Tracker({ close }) {
 }
 
 export default function App() {
-  const [products, setProducts] = useState([]),
-    [loading, setLoading] = useState(true),
+  const [products, setProducts] = useState(() => {
+      try { return JSON.parse(localStorage.getItem("bright-products-cache") || "[]"); }
+      catch { return []; }
+    }),
+    [loading, setLoading] = useState(() => !localStorage.getItem("bright-products-cache")),
     [loadError, setLoadError] = useState(""),
     [search, setSearch] = useState(""),
     [category, setCategory] = useState("All"),
@@ -706,14 +711,12 @@ export default function App() {
     [selected, setSelected] = useState(null),
     [order, setOrder] = useState(null),
     [menu, setMenu] = useState(false),
+    [savedOnly, setSavedOnly] = useState(false),
     [customer, setCustomer] = useState(undefined);
-  const [settings, setSettings] = useState({
-    deliveryZones: defaultZones,
-    bankName: "",
-    accountNumber: "",
-    accountName: "Bright Accessories",
-    whatsapp: "234",
-    announcement: "Lagos delivery and nationwide shipping",
+  const [settings, setSettings] = useState(() => {
+    const defaults = { deliveryZones:defaultZones, bankName:"", accountNumber:"", accountName:"Bright Accessories", whatsapp:"234", announcement:"Lagos delivery and nationwide shipping" };
+    try { return { ...defaults, ...JSON.parse(localStorage.getItem("bright-settings-cache") || "{}") }; }
+    catch { return defaults; }
   });
   const [cart, setCart] = useState(() => {
       try {
@@ -739,25 +742,29 @@ export default function App() {
     }
   }, [customer, cart.length]);
   useEffect(() => {
+    if (cart.length && new URLSearchParams(window.location.search).get("cart") === "1") {
+      setCartOpen(true);
+      window.history.replaceState({}, "", "/");
+    }
+  }, [cart.length]);
+  useEffect(() => {
     getDocs(collection(db, "products"))
-      .then((s) =>
-        setProducts(
-          s.docs
-            .map((d) => ({ id: d.id, ...d.data() }))
-            .filter((p) => p.active !== false),
-        ),
-      )
-      .catch(() =>
-        setLoadError(
-          "Products could not load. Check your connection and retry.",
-        ),
-      )
+      .then((s) => {
+        const next = s.docs.map((d) => ({ id:d.id, ...d.data() })).filter((p) => p.active !== false);
+        setProducts(next);
+        localStorage.setItem("bright-products-cache", JSON.stringify(next));
+      })
+      .catch(() => { if (!localStorage.getItem("bright-products-cache")) setLoadError("Products could not load. Check your connection and retry."); })
       .finally(() => setLoading(false));
   }, []);
   useEffect(() => {
     getDoc(doc(db, "settings", "store"))
       .then((s) => {
-        if (s.exists()) setSettings((old) => ({ ...old, ...s.data() }));
+        if (s.exists()) setSettings((old) => {
+          const next = { ...old, ...s.data() };
+          localStorage.setItem("bright-settings-cache", JSON.stringify(next));
+          return next;
+        });
       })
       .catch(() => {});
   }, []);
@@ -776,6 +783,7 @@ export default function App() {
   const visible = useMemo(() => {
     const list = products.filter(
       (p) =>
+        (!savedOnly || favourites.includes(p.id)) &&
         (category === "All" || (p.category || "Accessories") === category) &&
         `${p.name} ${p.description || ""}`
           .toLowerCase()
@@ -790,7 +798,7 @@ export default function App() {
             ? a.name.localeCompare(b.name)
             : Number(b.featured) - Number(a.featured),
     );
-  }, [products, category, search, sort]);
+  }, [products, category, search, sort, savedOnly, favourites]);
   const add = (p, qty = 1) => {
     setCart((c) => {
       const old = c.find((i) => i.id === p.id);
@@ -877,7 +885,8 @@ export default function App() {
         <div>
           <button
             className="round wishlist-button"
-            onClick={() => document.querySelector("#shop")?.scrollIntoView()}
+            aria-label="Show saved products"
+            onClick={() => { setSavedOnly((value) => !value); document.querySelector("#shop")?.scrollIntoView(); }}
           >
             <Icon name="heart" />
             {favourites.length > 0 && <b>{favourites.length}</b>}
@@ -911,7 +920,7 @@ export default function App() {
             </aside>
           </div>
           <figure>
-            <img src="/banner.jpg" alt="Bright Accessories collection" />
+            <img src="/banner.jpg" alt="Bright Accessories collection" width="1202" height="1280" fetchPriority="high" decoding="async" />
             <figcaption>
               <small>BRIGHT PICKS</small>
               <b>Practical. Reliable. Ready.</b>
@@ -943,7 +952,7 @@ export default function App() {
           <header>
             <div>
               <small>SHOP THE COLLECTION</small>
-              <h2>{category === "All" ? "All products" : category}</h2>
+              <h2>{savedOnly ? "Saved products" : category === "All" ? "All products" : category}</h2>
             </div>
             <div className="shop-controls">
               <label className="search">
@@ -952,6 +961,7 @@ export default function App() {
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search products"
+                  aria-label="Search products"
                 />
               </label>
               <select
@@ -970,7 +980,7 @@ export default function App() {
             {categories.map((c) => (
               <button
                 className={c === category ? "on" : ""}
-                onClick={() => setCategory(c)}
+                onClick={() => { setCategory(c); setSavedOnly(false); }}
                 key={c}
               >
                 {c}
@@ -1048,6 +1058,13 @@ export default function App() {
         </nav>
         <small>© {new Date().getFullYear()} Bright Accessories</small>
       </footer>
+      <nav className="mobile-app-nav" aria-label="App navigation">
+        <a href="#shop" onClick={() => setSavedOnly(false)}><Icon name="box"/><span>Shop</span></a>
+        <button onClick={() => { setSavedOnly(false); document.querySelector(".search input")?.focus(); document.querySelector("#shop")?.scrollIntoView(); }}><Icon name="search"/><span>Search</span></button>
+        <button className={savedOnly ? "active" : ""} onClick={() => { setSavedOnly(true); document.querySelector("#shop")?.scrollIntoView(); }}><Icon name="heart" fill={savedOnly ? "currentColor" : "none"}/><span>Saved</span></button>
+        <a href="/account"><Icon name="box"/><span>Orders</span></a>
+        <button onClick={() => setCartOpen(true)}><Icon name="bag"/><span>Bag</span>{count > 0 && <b>{count}</b>}</button>
+      </nav>
       {cartOpen && (
         <Cart
           cart={cart}

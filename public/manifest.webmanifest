@@ -1,0 +1,14 @@
+{
+  "name": "Bright Accessories",
+  "short_name": "Bright",
+  "description": "Shop quality phone accessories with delivery across Nigeria.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f6f5f0",
+  "theme_color": "#11130f",
+  "categories": ["shopping", "business"],
+  "icons": [
+    { "src": "/app-icon.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

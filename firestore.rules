@@ -25,7 +25,13 @@ service cloud.firestore {
         || (request.auth != null
           && request.auth.token.email_verified == true
           && resource.data.customer.email == request.auth.token.email);
-      allow update, delete: if isAdmin();
+      allow update: if isAdmin()
+        || (request.auth != null
+          && resource.data.userId == request.auth.uid
+          && resource.data.status == "pending"
+          && request.resource.data.status == "cancelled"
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status", "cancelledAt"]));
+      allow delete: if isAdmin();
     }
     match /publicOrders/{orderRef} {
       allow get: if true;

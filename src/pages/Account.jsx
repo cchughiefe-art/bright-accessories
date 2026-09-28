@@ -8,7 +8,7 @@ import {
   signOut,
   updateProfile,
 } from "firebase/auth";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { collection, doc, getDocs, query, serverTimestamp, updateDoc, where } from "firebase/firestore";
 import { auth, db } from "../firebase";
 import "./Account.css";
 
@@ -103,7 +103,7 @@ function AuthForm() {
   );
 }
 
-function OrderCard({ order }) {
+function OrderCard({ order, onCancel, onReorder, busy }) {
   const status = String(order.status || "pending").toLowerCase();
   const activeIndex = statusSteps.indexOf(status);
   return (
@@ -126,6 +126,10 @@ function OrderCard({ order }) {
         <summary>View {order.items?.length || 0} item{order.items?.length === 1 ? "" : "s"}</summary>
         <div className="order-items">{order.items?.map((item, index) => <div key={`${item.productId || item.name}-${index}`}>{item.imageUrl ? <img src={item.imageUrl} alt="" loading="lazy" /> : <i /> }<span><b>{item.name}</b><small>{item.quantity} × {money(item.price)}</small></span></div>)}</div>
       </details>
+      <div className="order-actions">
+        <button onClick={() => onReorder(order)}>Buy these items again</button>
+        {status === "pending" && <button className="danger" disabled={busy} onClick={() => onCancel(order)}>{busy ? "Cancelling…" : "Cancel order"}</button>}
+      </div>
     </article>
   );
 }
@@ -136,6 +140,7 @@ export default function Account() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [verificationSent, setVerificationSent] = useState(false);
+  const [busyOrder, setBusyOrder] = useState("");
   const [verificationMessage, setVerificationMessage] = useState(() => sessionStorage.getItem("bright-verification-notice") === "sent" ? "Verification email sent. Check Inbox, Spam and Promotions." : "");
 
   useEffect(() => onAuthStateChanged(auth, setUser), []);
@@ -148,7 +153,9 @@ export default function Account() {
       try {
         const searches = [getDocs(query(collection(db, "orders"), where("userId", "==", user.uid)))];
         if (user.emailVerified && user.email) searches.push(getDocs(query(collection(db, "orders"), where("customer.email", "==", user.email))));
-        const snapshots = await Promise.all(searches);
+        const results = await Promise.allSettled(searches);
+        const snapshots = results.filter((result) => result.status === "fulfilled").map((result) => result.value);
+        if (!snapshots.length) throw new Error("permission-denied");
         const merged = new Map();
         snapshots.forEach((snapshot) => snapshot.docs.forEach((item) => merged.set(item.id, { id: item.id, ...item.data() })));
         const sorted = [...merged.values()].sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
@@ -179,6 +186,29 @@ export default function Account() {
       setVerificationMessage(messages[err.code] || "Firebase could not send the email. Please try again shortly.");
     }
   };
+  const cancelOrder = async (order) => {
+    if (!window.confirm(`Cancel order ${order.orderRef}?`)) return;
+    setBusyOrder(order.id);
+    try {
+      await updateDoc(doc(db, "orders", order.id), { status: "cancelled", cancelledAt: serverTimestamp() });
+      setOrders((current) => current.map((item) => item.id === order.id ? { ...item, status: "cancelled" } : item));
+    } catch {
+      setError("This order could not be cancelled. It may already be processing or the updated rules still need to be published.");
+    } finally {
+      setBusyOrder("");
+    }
+  };
+  const reorder = (order) => {
+    const cart = (order.items || []).map((item) => ({
+      id: item.productId,
+      name: item.name,
+      imageUrl: item.imageUrl || "",
+      sellingPrice: Number(item.price || 0),
+      quantity: Number(item.quantity || 1),
+    }));
+    localStorage.setItem("bright-cart", JSON.stringify(cart));
+    window.location.href = "/?cart=1";
+  };
   if (user === undefined) return <div className="account-loading">Loading your account…</div>;
   if (!user) return <AuthForm />;
 
@@ -189,7 +219,7 @@ export default function Account() {
         <section className="account-heading"><div><p className="eyebrow">MY ACCOUNT</p><h1>Hello, {firstName}.</h1><p>Track purchases from order received to delivery.</p></div><div className="profile-chip"><b>{(user.displayName || user.email || "B").slice(0, 1).toUpperCase()}</b><span>{user.displayName || "Bright customer"}<small>{user.email}</small></span></div></section>
         {!user.emailVerified && <aside className="verification"><div><b>Verify {user.email}</b><p>{verificationMessage || "Open the Firebase email to verify your account and connect older orders."}</p><small>You can still check out while waiting for the email.</small></div><div className="verification-actions"><button disabled={verificationSent} onClick={resendVerification}>{verificationSent ? "Email sent" : "Resend email"}</button>{new URLSearchParams(window.location.search).get("next") === "checkout" && <a href="/?checkout=1">Continue to checkout</a>}</div></aside>}
         <section className="orders-heading"><div><p className="eyebrow">ORDER HISTORY</p><h2>Your orders</h2></div><span>{orders.length} order{orders.length === 1 ? "" : "s"}</span></section>
-        {loading ? <div className="orders-empty">Loading your orders…</div> : error ? <div className="orders-empty error">{error}</div> : orders.length ? <div className="orders-list">{orders.map((order) => <OrderCard order={order} key={order.id} />)}</div> : <div className="orders-empty"><b>No orders here yet</b><p>Orders placed while signed in will appear here automatically.</p><a href="/">Start shopping</a></div>}
+        {loading ? <div className="orders-empty">Loading your orders…</div> : error && !orders.length ? <div className="orders-empty error">{error}</div> : orders.length ? <><div className="orders-list">{orders.map((order) => <OrderCard order={order} onCancel={cancelOrder} onReorder={reorder} busy={busyOrder === order.id} key={order.id} />)}</div>{error && <p className="account-inline-error">{error}</p>}</> : <div className="orders-empty"><b>No orders here yet</b><p>Orders placed while signed in will appear here automatically.</p><a href="/">Start shopping</a></div>}
       </main>
     </div>
   );
