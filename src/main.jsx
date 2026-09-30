@@ -7,6 +7,7 @@ import "./index.css";
 
 const Admin = lazy(() => import("./pages/Admin"));
 const Account = lazy(() => import("./pages/Account"));
+const Download = lazy(() => import("./pages/Download"));
 
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
   window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
@@ -20,7 +21,8 @@ ReactDOM.createRoot(document.getElementById("root")).render(
         <Route path="/" element={<App />} />
         <Route path="/admin" element={<Admin />} />
         <Route path="/account" element={<Account />} />
+        <Route path="/download" element={<Download />} />
       </Routes>
     </Suspense>
-  </BrowserRouter>
+  </BrowserRouter>,
 );
