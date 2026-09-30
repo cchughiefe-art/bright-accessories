@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { doc, getDoc } from "firebase/firestore";
+import { Capacitor } from "@capacitor/core";
+import { Browser } from "@capacitor/browser";
 import { db } from "../firebase";
 import "./Download.css";
 
@@ -22,6 +24,16 @@ function Mark({ name }) {
 
 export default function Download() {
   const [release, setRelease] = useState(fallback);
+
+  const downloadApk = async (event) => {
+    if (!Capacitor.isNativePlatform()) return;
+    event.preventDefault();
+    try {
+      await Browser.open({ url: release.apkUrl, presentationStyle: "popover" });
+    } catch {
+      window.location.assign(release.apkUrl);
+    }
+  };
 
   useEffect(() => {
     Promise.allSettled([
@@ -53,7 +65,7 @@ export default function Download() {
         <h1>Bright Accessories,<br/><em>right in your pocket.</em></h1>
         <p>{release.message}</p>
         <div className="download-actions">
-          <a className="download-button" href={release.apkUrl}><Mark name="download"/>Download APK</a>
+          <a className="download-button" href={release.apkUrl} onClick={downloadApk}><Mark name="download"/>Download APK</a>
           <small>Version {release.version} · Direct download</small>
         </div>
         <div className="download-trust"><span><Mark name="shield"/>Securely signed</span><span><Mark name="update"/>Update alerts included</span></div>
@@ -82,6 +94,6 @@ export default function Download() {
       <ul>{release.releaseNotes.map((note) => <li key={note}><Mark name="shield"/>{note}</li>)}</ul>
     </section>
 
-    <footer className="download-footer"><p>Only install Bright Accessories from this official page.</p><a href={release.apkUrl}>Download version {release.version} <Mark name="download"/></a></footer>
+    <footer className="download-footer"><p>Only install Bright Accessories from this official page.</p><a href={release.apkUrl} onClick={downloadApk}>Download version {release.version} <Mark name="download"/></a></footer>
   </main>;
 }
