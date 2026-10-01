@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import App from "./App";
 import AppUpdate from "./components/AppUpdate";
+import SplashIntro from "./components/SplashIntro";
 import "./index.css";
 
 const Admin = lazy(() => import("./pages/Admin"));
@@ -15,6 +16,7 @@ if ("serviceWorker" in navigator && import.meta.env.PROD) {
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <BrowserRouter>
+    <SplashIntro />
     <AppUpdate />
     <Suspense fallback={<div className="route-loading">Loading Bright Accessories…</div>}>
       <Routes>
