@@ -40,9 +40,9 @@ export default function SplashIntro() {
       attempts += 1;
       const cached = readProducts();
       if (cached.length) setProducts(cached);
-      if (cached.length >= 5 || attempts >= 8) window.clearInterval(productTimer);
+      if (cached.length >= 5 || attempts >= 60) window.clearInterval(productTimer);
     }, 350);
-    const exitTimer = window.setTimeout(() => setPhase("exit"), 6900);
+    const exitTimer = window.setTimeout(() => setPhase("exit"), 30000);
 
     return () => {
       window.clearInterval(productTimer);
