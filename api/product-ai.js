@@ -21,53 +21,39 @@ function extractJson(value = "") {
   return JSON.parse(cleaned.slice(start, end + 1));
 }
 
-function findSuggestion(value) {
-  const texts = [];
-  const visit = (node) => {
-    if (!node) return;
-    if (typeof node === "string") { texts.push(node); return; }
-    if (Array.isArray(node)) { node.forEach(visit); return; }
-    if (typeof node === "object") {
-      for (const [key, child] of Object.entries(node)) {
-        if (["text", "output_text"].includes(key) && typeof child === "string") texts.unshift(child);
-        else if (!["input", "model"].includes(key)) visit(child);
-      }
-    }
-  };
-  visit(value?.output ?? value?.candidates ?? value);
-  for (const text of texts) {
-    try { return extractJson(text); } catch { /* try the next Gemini content block */ }
-  }
-  throw new Error("Gemini could not produce a product draft. Try a clearer product image.");
-}
-
 export default async function handler(request, response) {
   if (request.method !== "POST") return response.status(405).json({ error:"Method not allowed" });
   try {
     await authenticateAdmin(request);
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) throw new Error("GEMINI_API_KEY is not configured in Vercel");
+    const apiKey = process.env.GROQ_API_KEY;
+    if (!apiKey) throw new Error("GROQ_API_KEY is not configured in Vercel");
     const image = request.body?.image;
     if (typeof image !== "string" || !image.startsWith("data:image/") || image.length > 9_000_000) {
       return response.status(400).json({ error:"Choose a JPG, PNG or WebP image smaller than 6MB" });
     }
     const match = image.match(/^data:(image\/(?:jpeg|png|webp));base64,(.+)$/);
     if (!match) return response.status(400).json({ error:"The selected image format is not supported" });
-    const model = process.env.GEMINI_PRODUCT_MODEL || "gemini-3.8-flash";
-    const aiResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
+    const model = process.env.GROQ_PRODUCT_MODEL || "meta-llama/llama-4-scout-17b-16e-instruct";
+    const aiResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method:"POST",
-      headers:{ "x-goog-api-key":apiKey, "content-type":"application/json" },
+      headers:{ authorization:`Bearer ${apiKey}`, "content-type":"application/json" },
       body:JSON.stringify({
         model,
-        input:[
-          { type:"text", text:"You are a catalogue assistant for Bright Accessories, a Nigerian phone and electronics accessories shop. Inspect the attached product image. Respond with one valid JSON object only, with these keys: name, category, description, confidence, notes. Category must be one of Audio, Chargers, Cables, Power Banks, Phone Cases, Smart Watches, Storage, Other. Description must be two concise persuasive sentences. Confidence must be an integer from 0 to 100. Never invent a brand, model compatibility, capacity, wattage, or technical specification that is not clearly visible." },
-          { type:"image", data:match[2], mime_type:match[1] },
-        ],
+        messages:[{ role:"user", content:[
+          { type:"text", text:"You are a catalogue assistant for Bright Accessories, a Nigerian phone and electronics accessories shop. Inspect the product image. Respond with one valid JSON object only, with these keys: name, category, description, confidence, notes. Category must be one of Audio, Chargers, Cables, Power Banks, Phone Cases, Smart Watches, Storage, Other. Description must be two concise persuasive sentences. Confidence must be an integer from 0 to 100. Never invent a brand, model compatibility, capacity, wattage, or technical specification that is not clearly visible." },
+          { type:"image_url", image_url:{ url:image } },
+        ]}],
+        response_format:{ type:"json_object" },
+        temperature:0.2,
+        max_completion_tokens:500,
       }),
     });
     const data = await aiResponse.json();
-    if (!aiResponse.ok) throw new Error(data.error?.message || "Gemini analysis failed");
-    const suggestion = findSuggestion(data);
+    if (!aiResponse.ok) {
+      if (aiResponse.status === 429) throw new Error("The free AI limit is temporarily busy. Please wait a minute and try again.");
+      throw new Error(data.error?.message || "Groq vision analysis failed");
+    }
+    const suggestion = extractJson(data.choices?.[0]?.message?.content || "");
     return response.status(200).json({
       name:String(suggestion.name || "").slice(0,100), category:String(suggestion.category || "Other").slice(0,50),
       description:String(suggestion.description || "").slice(0,700), confidence:Math.max(0,Math.min(100,Number(suggestion.confidence)||0)),

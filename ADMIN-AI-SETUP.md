@@ -6,13 +6,13 @@ The AI product helper is protected by the existing Firebase administrator login.
 
 In Vercel, open the Bright Accessories project, then go to **Settings → Environment Variables** and add:
 
-- Name: `GEMINI_API_KEY`
-- Value: your free Google Gemini API key
+- Name: `GROQ_API_KEY`
+- Value: your free Groq API key
 - Environments: Production, Preview, and Development
 
 Redeploy the latest deployment after saving the variable.
 
-Create the free key at [Google AI Studio](https://aistudio.google.com/apikey). You may optionally add `GEMINI_PRODUCT_MODEL`. When omitted, the helper uses the current `gemini-3.8-flash` vision model.
+Create the free key at [Groq Console](https://console.groq.com/keys). You may optionally add `GROQ_PRODUCT_MODEL`. When omitted, the helper uses the vision-capable `meta-llama/llama-4-scout-17b-16e-instruct` model.
 
 ## How to use it
 
