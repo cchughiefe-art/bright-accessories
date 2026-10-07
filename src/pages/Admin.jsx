@@ -51,14 +51,13 @@ async function uploadToCloudinary(source, publicId) {
   return uploaded;
 }
 function LoginScreen({ onLogin }) {
-  const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const login = async () => {
     setBusy(true); setErr("");
     try {
-      const result = await signInWithEmailAndPassword(auth, email.trim(), pw);
+      const result = await signInWithEmailAndPassword(auth, "cchughiefe@gmail.com", pw);
       if (result.user.email?.toLowerCase() !== "cchughiefe@gmail.com") {
         await signOut(auth);
         throw new Error("not-admin");
@@ -69,22 +68,14 @@ function LoginScreen({ onLogin }) {
     finally { setBusy(false); }
   };
   return (
-    <div style={{ minHeight:"100vh", background:"#1A1A1A", display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
-      <div style={{ background:"white", borderRadius:16, padding:32, width:"100%", maxWidth:360, textAlign:"center" }}>
-        <h1 style={{ color:"var(--gold)", marginBottom:6, fontSize:24 }}>Bright Admin</h1>
-        <p style={{ color:"#888", fontSize:13, marginBottom:24 }}>Sign in with your protected administrator account</p>
-        <input className="input-field" type="email" placeholder="Admin email"
-          value={email} onChange={(e) => setEmail(e.target.value)}
-          style={{ marginBottom:12 }} />
-        <input className="input-field" type="password" placeholder="Admin Password"
-          value={pw} onChange={(e) => setPw(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && login()}
-          style={{ marginBottom:12 }} />
-        {err && <p style={{ color:"var(--red)", fontSize:13, marginBottom:10 }}>{err}</p>}
-        <button className="btn-gold" style={{ width:"100%" }}
-          disabled={busy || !email || !pw} onClick={login}>
-          {busy ? "Signing in..." : "Login"}
-        </button>
+    <div className="admin-login">
+      <div className="admin-login-card">
+        <div className="admin-login-brand"><span>BA</span><div><b>Bright Accessories</b><small>Commerce command centre</small></div></div>
+        <div className="admin-login-copy"><span>ADMIN ACCESS</span><h1>Welcome back.</h1><p>Enter your private password to manage the store.</p></div>
+        <label className="admin-password-field"><span>Password</span><input type="password" autoFocus autoComplete="current-password" placeholder="Enter admin password" value={pw} onChange={(e) => setPw(e.target.value)} onKeyDown={(e) => e.key === "Enter" && login()} /></label>
+        {err && <p className="admin-login-error">That password is incorrect. Please try again.</p>}
+        <button className="admin-login-button" disabled={busy || !pw} onClick={login}>{busy ? "Checking…" : "Open dashboard"}<span>→</span></button>
+        <p className="admin-login-security">Protected administrator access</p>
       </div>
     </div>
   );
@@ -144,6 +135,8 @@ function ProductForm({ initial, onSave, onCancel }) {
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
+  const [analysing, setAnalysing] = useState(false);
+  const [aiResult, setAiResult] = useState(null);
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   const handleImagePick = (e) => {
@@ -151,6 +144,25 @@ function ProductForm({ initial, onSave, onCancel }) {
     if (!file) return;
     setImgFile(file);
     setPreview(URL.createObjectURL(file));
+    setAiResult(null);
+  };
+
+  const analyseImage = async () => {
+    if (!imgFile) { setErr("Choose a product image first."); return; }
+    if (imgFile.size > 6 * 1024 * 1024) { setErr("Please choose an image smaller than 6MB."); return; }
+    setAnalysing(true); setErr(""); setAiResult(null);
+    try {
+      const image = await new Promise((resolve, reject) => {
+        const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(imgFile);
+      });
+      const token = await auth.currentUser?.getIdToken();
+      const response = await fetch("/api/product-ai", { method:"POST", headers:{ "content-type":"application/json", authorization:`Bearer ${token}` }, body:JSON.stringify({ image }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "AI analysis failed");
+      setForm(current => ({ ...current, name:data.name || current.name, description:data.description || current.description, category:data.category || current.category }));
+      setAiResult(data);
+    } catch (error) { setErr(error.message); }
+    finally { setAnalysing(false); }
   };
 
   const uploadImage = async () => {
@@ -189,8 +201,19 @@ function ProductForm({ initial, onSave, onCancel }) {
   };
 
   return (
-    <div className="modal" style={{ maxWidth:"100%" }}>
-      <h3 style={{ marginBottom:18 }}>{initial?.docId ? "Edit Product" : "Add New Product"}</h3>
+    <div className="modal admin-product-form" style={{ maxWidth:"100%" }}>
+      <div className="admin-product-form-head"><span>{initial?.docId ? "EDIT PRODUCT" : "NEW PRODUCT"}</span><h3>{initial?.docId ? "Update product" : "Create product listing"}</h3><p>Upload an image and let the AI helper draft the name, category and description.</p></div>
+      <div className="admin-ai-panel">
+        <div className="admin-ai-title"><span>✦</span><div><b>AI product helper</b><small>Start with one clear product photo</small></div></div>
+        <div className="admin-ai-row">
+          <label className="admin-ai-image">
+            {preview ? <img src={preview} alt="Product preview" /> : <><b>+</b><span>Choose image</span></>}
+            <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleImagePick}/>
+          </label>
+          <div><button type="button" className="admin-ai-action" onClick={analyseImage} disabled={!imgFile || analysing}>{analysing ? "Looking at product…" : "✦ Write listing from image"}</button><small>The result is a draft. You can edit everything below.</small></div>
+        </div>
+        {aiResult && <div className="admin-ai-result"><b>Draft added · {aiResult.confidence}% confidence</b><span>{aiResult.notes}</span></div>}
+      </div>
       {[
         { k:"name", label:"Product Name *", ph:"e.g. iPhone 17 Case" },
         { k:"sellingPrice", label:"Selling Price (N) *", ph:"e.g. 5000", type:"number" },
@@ -221,15 +244,7 @@ function ProductForm({ initial, onSave, onCancel }) {
           <span style={{ fontSize:14, fontWeight:600 }}>Mark as Featured (shows at top)</span>
         </label>
       </div>
-      <div style={{ marginBottom:18 }}>
-        <label style={{ fontSize:13, fontWeight:600, display:"block", marginBottom:5 }}>Product Image</label>
-        {preview && (
-          <img src={preview} alt="preview"
-            style={{ width:100, height:100, objectFit:"cover", borderRadius:8, marginBottom:8, display:"block" }} />
-        )}
-        <input type="file" accept="image/*" onChange={handleImagePick} style={{ fontSize:13, display:"block" }} />
-        {uploading && <p style={{ fontSize:12, color:"var(--gold)", marginTop:6, fontWeight:600 }}>Uploading image...</p>}
-      </div>
+      {uploading && <p style={{ fontSize:12, color:"var(--gold)", marginTop:6, fontWeight:600 }}>Uploading image...</p>}
       {err && <p style={{ color:"var(--red)", fontSize:13, marginBottom:12 }}>{err}</p>}
       <div style={{ display:"flex", gap:10 }}>
         <button className="btn-outline" onClick={onCancel} style={{ flex:1 }}>Cancel</button>
