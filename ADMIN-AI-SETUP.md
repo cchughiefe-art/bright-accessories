@@ -6,13 +6,13 @@ The AI product helper is protected by the existing Firebase administrator login.
 
 In Vercel, open the Bright Accessories project, then go to **Settings → Environment Variables** and add:
 
-- Name: `OPENAI_API_KEY`
-- Value: your OpenAI API key
+- Name: `GEMINI_API_KEY`
+- Value: your free Google Gemini API key
 - Environments: Production, Preview, and Development
 
 Redeploy the latest deployment after saving the variable.
 
-You may optionally add `OPENAI_PRODUCT_MODEL`. When omitted, the helper uses `gpt-4.1-mini`.
+Create the free key at [Google AI Studio](https://aistudio.google.com/apikey). You may optionally add `GEMINI_PRODUCT_MODEL`. When omitted, the helper uses `gemini-2.5-flash`.
 
 ## How to use it
 

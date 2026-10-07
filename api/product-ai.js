@@ -25,27 +25,29 @@ export default async function handler(request, response) {
   if (request.method !== "POST") return response.status(405).json({ error:"Method not allowed" });
   try {
     await authenticateAdmin(request);
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) throw new Error("OPENAI_API_KEY is not configured in Vercel");
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) throw new Error("GEMINI_API_KEY is not configured in Vercel");
     const image = request.body?.image;
     if (typeof image !== "string" || !image.startsWith("data:image/") || image.length > 9_000_000) {
       return response.status(400).json({ error:"Choose a JPG, PNG or WebP image smaller than 6MB" });
     }
-    const aiResponse = await fetch("https://api.openai.com/v1/responses", {
+    const match = image.match(/^data:(image\/(?:jpeg|png|webp));base64,(.+)$/);
+    if (!match) return response.status(400).json({ error:"The selected image format is not supported" });
+    const model = process.env.GEMINI_PRODUCT_MODEL || "gemini-2.5-flash";
+    const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
       method:"POST",
-      headers:{ authorization:`Bearer ${apiKey}`, "content-type":"application/json" },
+      headers:{ "x-goog-api-key":apiKey, "content-type":"application/json" },
       body:JSON.stringify({
-        model:process.env.OPENAI_PRODUCT_MODEL || "gpt-4.1-mini",
-        max_output_tokens:500,
-        input:[{ role:"user", content:[
-          { type:"input_text", text:"You are a catalogue assistant for Bright Accessories, a Nigerian phone and electronics accessories shop. Inspect the product image. Return JSON only with: name (clear sales-ready product name), category (one of Audio, Chargers, Cables, Power Banks, Phone Cases, Smart Watches, Storage, Other), description (2 concise persuasive sentences, no unsupported specifications), confidence (integer 0-100), and notes (short warning about anything the seller should verify). Never invent brand, model compatibility, capacity, wattage, or technical specifications that are not clearly visible." },
-          { type:"input_image", image_url:image },
+        contents:[{ role:"user", parts:[
+          { inline_data:{ mime_type:match[1], data:match[2] } },
+          { text:"You are a catalogue assistant for Bright Accessories, a Nigerian phone and electronics accessories shop. Inspect the product image. Return JSON only with: name (clear sales-ready product name), category (one of Audio, Chargers, Cables, Power Banks, Phone Cases, Smart Watches, Storage, Other), description (2 concise persuasive sentences, no unsupported specifications), confidence (integer 0-100), and notes (short warning about anything the seller should verify). Never invent brand, model compatibility, capacity, wattage, or technical specifications that are not clearly visible." },
         ]}],
+        generationConfig:{ responseMimeType:"application/json", temperature:0.25, maxOutputTokens:500 },
       }),
     });
     const data = await aiResponse.json();
-    if (!aiResponse.ok) throw new Error(data.error?.message || "AI analysis failed");
-    const text = data.output?.flatMap(item => item.content || []).find(item => item.type === "output_text")?.text;
+    if (!aiResponse.ok) throw new Error(data.error?.message || "Gemini analysis failed");
+    const text = data.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("");
     const suggestion = extractJson(text);
     return response.status(200).json({
       name:String(suggestion.name || "").slice(0,100), category:String(suggestion.category || "Other").slice(0,50),
