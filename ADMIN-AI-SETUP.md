@@ -12,7 +12,7 @@ In Vercel, open the Bright Accessories project, then go to **Settings → Enviro
 
 Redeploy the latest deployment after saving the variable.
 
-Create the free key at [Google AI Studio](https://aistudio.google.com/apikey). You may optionally add `GEMINI_PRODUCT_MODEL`. When omitted, the helper uses `gemini-2.5-flash`.
+Create the free key at [Google AI Studio](https://aistudio.google.com/apikey). You may optionally add `GEMINI_PRODUCT_MODEL`. When omitted, the helper uses the current `gemini-3.8-flash` vision model.
 
 ## How to use it
 

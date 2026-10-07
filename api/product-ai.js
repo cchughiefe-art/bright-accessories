@@ -33,7 +33,7 @@ export default async function handler(request, response) {
     }
     const match = image.match(/^data:(image\/(?:jpeg|png|webp));base64,(.+)$/);
     if (!match) return response.status(400).json({ error:"The selected image format is not supported" });
-    const model = process.env.GEMINI_PRODUCT_MODEL || "gemini-2.5-flash";
+    const model = process.env.GEMINI_PRODUCT_MODEL || "gemini-3.8-flash";
     const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
       method:"POST",
       headers:{ "x-goog-api-key":apiKey, "content-type":"application/json" },
