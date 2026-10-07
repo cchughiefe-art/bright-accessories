@@ -1,11 +1,13 @@
 import crypto from "node:crypto";
 import { authenticateCustomer } from "../lib/firebase-auth.js";
+import { enforceRateLimit } from "../lib/rate-limit.js";
 
 const clean = (value) => String(value || "").replace(/[^A-Z0-9-]/gi, "").slice(0, 40);
 
 export default async function handler(request, response) {
   if (request.method !== "POST") return response.status(405).json({ error:"Method not allowed" });
-  try { await authenticateCustomer(request); }
+  let user;
+  try { user = await authenticateCustomer(request); await enforceRateLimit(`receipt:${user.uid}`, 12, 10 * 60 * 1000); }
   catch (error) { return response.status(401).json({ error:error.message }); }
   const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
   const apiKey = process.env.CLOUDINARY_API_KEY;

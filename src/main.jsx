@@ -26,5 +26,5 @@ ReactDOM.createRoot(document.getElementById("root")).render(
         <Route path="/download" element={<Download />} />
       </Routes>
     </Suspense>
-  </BrowserRouter>,
+  </BrowserRouter>
 );

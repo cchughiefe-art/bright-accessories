@@ -1,6 +1,14 @@
 # Bright Accessories
 
+## Production setup required
+
+The checkout now calculates prices, reserves stock, creates tracking records and sends email from trusted server functions. Add every variable in `.env.example` to the Vercel project. The Firebase service-account values come from Firebase Console → Project settings → Service accounts → Generate new private key. Keep the private key in Vercel only; never add it to Git.
+
+After deployment, publish both `firestore.rules` and `storage.rules` in Firebase Console. Client writes to orders and tracking are intentionally blocked because `/api/create-order` and `/api/order-status` now perform those operations securely.
+
 Mobile-first ecommerce website and direct-download Android app for Bright Accessories.
+
+The public APK download page is available at `/download`. It reads the latest version, release notes and direct APK URL from Admin → Store settings, with `public/app-version.json` as a fallback.
 
 ## Customer experience
 

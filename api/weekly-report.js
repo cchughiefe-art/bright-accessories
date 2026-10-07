@@ -1,116 +1,45 @@
+import { getAdminDb } from "../lib/firebase-admin.js";
+import { brevo, escapeHtml } from "../lib/email.js";
+
+const value = (input) => Number(input || 0);
+const money = (input) => `₦${value(input).toLocaleString("en-NG")}`;
+
 export default async function handler(req, res) {
-  const token = req.query.token;
-  if (token !== process.env.WEEKLY_REPORT_TOKEN) {
+  const bearer = req.headers.authorization?.replace(/^Bearer\s+/i, "");
+  const expected = process.env.CRON_SECRET || process.env.WEEKLY_REPORT_TOKEN;
+  if (!expected || (bearer !== expected && req.query.token !== expected)) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
   try {
-    const { initializeApp, getApps, cert } = await import("firebase-admin/app");
-    const { getFirestore } = await import("firebase-admin/firestore");
-
-    if (!getApps().length) {
-      initializeApp({
-        credential: cert({
-          projectId: process.env.FIREBASE_PROJECT_ID,
-          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-          privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
-        }),
-      });
-    }
-
-    const db = getFirestore();
-    const productsSnap = await db.collection("products").get();
-    const products = productsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-
-    const ordersSnap = await db.collection("orders").get();
-    const allOrders = ordersSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-
-    const weekAgo = new Date();
-    weekAgo.setDate(weekAgo.getDate() - 7);
-
-    const weekOrders = allOrders.filter((o) => {
-      if (!o.createdAt) return false;
-      const t = o.createdAt._seconds ? o.createdAt._seconds * 1000 : new Date(o.createdAt).getTime();
-      return t >= weekAgo.getTime();
+    const db = getAdminDb();
+    const [productsSnap, ordersSnap] = await Promise.all([
+      db.collection("products").get(),
+      db.collection("orders").where("createdAt", ">=", new Date(Date.now() - 7 * 86400000)).get(),
+    ]);
+    const products = productsSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    const orders = ordersSnap.docs.map((doc) => doc.data());
+    const delivered = orders.filter((order) => order.status === "delivered");
+    const pending = orders.filter((order) => !["delivered", "cancelled"].includes(order.status));
+    const revenue = delivered.reduce((sum, order) => sum + value(order.total), 0);
+    const cogs = delivered.reduce((sum, order) => sum + (order.items || []).reduce(
+      (itemSum, item) => itemSum + value(item.costPrice) * value(item.quantity), 0,
+    ), 0);
+    const delivery = delivered.reduce((sum, order) => sum + value(order.deliveryFee), 0);
+    const profit = revenue - cogs - delivery;
+    const lowStock = products.filter((product) => value(product.availableQuantity) < 5);
+    const rows = products.map((product) => `<tr><td>${escapeHtml(product.name)}</td><td>${value(product.availableQuantity)}</td><td>${money(product.sellingPrice)}</td></tr>`).join("");
+    const low = lowStock.map((product) => `<li>${escapeHtml(product.name)} — ${value(product.availableQuantity)} left</li>`).join("");
+    const htmlContent = `<h2>Bright Accessories weekly report</h2><p>Week ending ${new Date().toLocaleDateString("en-NG")}</p><h3>Financial summary</h3><p>Revenue: <strong>${money(revenue)}</strong><br>Cost of goods: ${money(cogs)}<br>Delivery: ${money(delivery)}<br>Net profit: <strong>${money(profit)}</strong></p><h3>Orders</h3><p>Delivered: ${delivered.length}<br>Still active: ${pending.length}</p>${low ? `<h3>Low stock</h3><ul>${low}</ul>` : "<p>All products have sufficient stock.</p>"}<h3>Inventory</h3><table cellpadding="8" cellspacing="0" border="1"><tr><th>Product</th><th>Stock</th><th>Price</th></tr>${rows}</table>`;
+    await brevo({
+      sender: { name: "Bright Accessories", email: process.env.BREVO_SENDER_EMAIL || "cchughiefe@gmail.com" },
+      to: [{ email: process.env.ORDER_ALERT_EMAIL || "tribaluncle@gmail.com", name: "Bright Admin" }],
+      subject: `Weekly report — profit ${money(profit)}`,
+      htmlContent,
     });
-
-    const successfulOrders = weekOrders.filter((o) => o.status === "successful");
-    const pendingOrders = allOrders.filter((o) => o.status === "pending");
-
-    const revenue = successfulOrders.reduce((s, o) => s + (o.total || 0), 0);
-    const cogs = successfulOrders.reduce((s, o) => s + ((o.costPrice || 0) * (o.quantity || 1)), 0);
-    const deliveryCosts = successfulOrders.reduce((s, o) => s + ((o.deliveryCost || 0) * (o.quantity || 1)), 0);
-    const profit = revenue - cogs - deliveryCosts;
-
-    const lowStock = products.filter((p) => p.availableQuantity < 5);
-    const fmt = (n) => `N${Number(n).toLocaleString()}`;
-
-    const html = `
-      <h2>Bright Accessories - Weekly Report</h2>
-      <p style="color:#888; font-size:13px;">Week ending ${new Date().toLocaleDateString()}</p>
-      <h3 style="margin-top:20px;">Financial Summary (Last 7 Days)</h3>
-      <table style="border-collapse:collapse; font-family:sans-serif; font-size:14px; width:100%; max-width:400px;">
-        <tr style="background:#f9f5f0;">
-          <td style="padding:8px 12px; font-weight:bold;">Revenue</td>
-          <td style="padding:8px 12px; color:green; font-weight:bold;">${fmt(revenue)}</td>
-        </tr>
-        <tr>
-          <td style="padding:8px 12px;">Cost of Goods</td>
-          <td style="padding:8px 12px; color:#D94040;">-${fmt(cogs)}</td>
-        </tr>
-        <tr>
-          <td style="padding:8px 12px;">Delivery Costs</td>
-          <td style="padding:8px 12px; color:#D94040;">-${fmt(deliveryCosts)}</td>
-        </tr>
-        <tr style="background:#f0fdf4; font-weight:bold; font-size:15px;">
-          <td style="padding:10px 12px; border-top:2px solid #ccc;">NET PROFIT</td>
-          <td style="padding:10px 12px; border-top:2px solid #ccc; color:${profit >= 0 ? "green" : "red"};">${fmt(profit)}</td>
-        </tr>
-      </table>
-      <h3 style="margin-top:24px;">Orders This Week</h3>
-      <p>Successful deliveries: <strong>${successfulOrders.length}</strong></p>
-      <p>Still pending: <strong>${pendingOrders.length}</strong></p>
-      ${lowStock.length > 0 ? `
-        <h3 style="margin-top:24px; color:#D97706;">Low Stock Alert</h3>
-        <ul style="font-family:sans-serif; font-size:14px;">
-          ${lowStock.map((p) => `<li><strong>${p.name}</strong> - ${p.availableQuantity} units left</li>`).join("")}
-        </ul>
-      ` : "<p style='color:green; margin-top:20px;'>All products have sufficient stock.</p>"}
-      <h3 style="margin-top:24px;">All Products Stock</h3>
-      <table style="border-collapse:collapse; font-family:sans-serif; font-size:13px; width:100%;">
-        <tr style="background:#1A1A1A; color:white;">
-          <th style="padding:8px 12px; text-align:left;">Product</th>
-          <th style="padding:8px 12px; text-align:right;">Stock</th>
-          <th style="padding:8px 12px; text-align:right;">Price</th>
-        </tr>
-        ${products.map((p, i) => `
-          <tr style="background:${i % 2 === 0 ? "#f9f5f0" : "white"};">
-            <td style="padding:8px 12px;">${p.name}</td>
-            <td style="padding:8px 12px; text-align:right; color:${p.availableQuantity < 5 ? "#D97706" : "#2E7D55"}; font-weight:bold;">${p.availableQuantity}</td>
-            <td style="padding:8px 12px; text-align:right;">${fmt(p.sellingPrice)}</td>
-          </tr>
-        `).join("")}
-      </table>
-      <p style="margin-top:30px; font-size:12px; color:#aaa;">Sent automatically by Bright Accessories</p>
-    `;
-
-    await fetch("https://api.brevo.com/v3/smtp/email", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "api-key": process.env.BREVO_API_KEY,
-      },
-      body: JSON.stringify({
-        sender: { name: "Bright Accessories", email: "cchughiefe@gmail.com" },
-        to: [{ email: process.env.ORDER_ALERT_EMAIL || "tribaluncle@gmail.com", name: "Bright Admin" }],
-        subject: `Weekly Report - Profit: ${fmt(profit)}`,
-        htmlContent: html,
-      }),
-    });
-
-    return res.status(200).json({ ok: true, profit, successfulOrders: successfulOrders.length });
-  } catch (e) {
-    console.error(e);
-    return res.status(500).json({ error: e.message });
+    return res.status(200).json({ ok: true, profit, delivered: delivered.length });
+  } catch (error) {
+    console.error("weekly-report", error);
+    return res.status(500).json({ error: "Weekly report could not be sent." });
   }
 }

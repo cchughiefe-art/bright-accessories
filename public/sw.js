@@ -1,4 +1,4 @@
-const CACHE = "bright-store-v1";
+const CACHE = "bright-store-v4";
 const CORE = ["/", "/banner.jpg", "/app-icon.png"];
 
 self.addEventListener("install", (event) => {
@@ -21,7 +21,14 @@ self.addEventListener("fetch", (event) => {
     }).catch(() => caches.match("/")));
     return;
   }
-  if (event.request.destination === "image" || event.request.destination === "style" || event.request.destination === "script") {
+  if (event.request.destination === "style" || event.request.destination === "script") {
+    event.respondWith(fetch(event.request).then((response) => {
+      if (response.ok) caches.open(CACHE).then((cache) => cache.put(event.request, response.clone()));
+      return response;
+    }).catch(() => caches.match(event.request)));
+    return;
+  }
+  if (event.request.destination === "image") {
     event.respondWith(caches.match(event.request).then((cached) => cached || fetch(event.request).then((response) => {
       if (response.ok) caches.open(CACHE).then((cache) => cache.put(event.request, response.clone()));
       return response;

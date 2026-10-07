@@ -16,6 +16,7 @@ const newerThan = (latest, installed) => {
   }
   return false;
 };
+const newest = (first, second) => newerThan(first, second) ? first : second;
 
 export default function AppUpdate() {
   const [update, setUpdate] = useState(null);
@@ -34,7 +35,7 @@ export default function AppUpdate() {
       const settings = settingsSnapshot?.exists?.() ? settingsSnapshot.data() : {};
       const release = {
         ...fallback,
-        latestVersion: settings.apkLatestVersion || fallback.latestVersion,
+        latestVersion: newest(settings.apkLatestVersion || "0", fallback.latestVersion),
         minimumVersion: settings.apkMinimumVersion || fallback.minimumVersion,
         required: settings.apkUpdateRequired ?? fallback.required,
         apkUrl: settings.apkDownloadUrl || fallback.apkUrl,

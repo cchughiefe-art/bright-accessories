@@ -8,7 +8,7 @@ import {
   signOut,
   updateProfile,
 } from "firebase/auth";
-import { collection, doc, getDocs, query, serverTimestamp, updateDoc, where } from "firebase/firestore";
+import { collection, getDocs, limit, query, where } from "firebase/firestore";
 import { auth, db } from "../firebase";
 import "./Account.css";
 
@@ -151,8 +151,8 @@ export default function Account() {
       setLoading(true);
       setError("");
       try {
-        const searches = [getDocs(query(collection(db, "orders"), where("userId", "==", user.uid)))];
-        if (user.emailVerified && user.email) searches.push(getDocs(query(collection(db, "orders"), where("customer.email", "==", user.email))));
+        const searches = [getDocs(query(collection(db, "orders"), where("userId", "==", user.uid), limit(100)))];
+        if (user.emailVerified && user.email) searches.push(getDocs(query(collection(db, "orders"), where("customer.email", "==", user.email), limit(100))));
         const results = await Promise.allSettled(searches);
         const snapshots = results.filter((result) => result.status === "fulfilled").map((result) => result.value);
         if (!snapshots.length) throw new Error("permission-denied");
@@ -190,10 +190,16 @@ export default function Account() {
     if (!window.confirm(`Cancel order ${order.orderRef}?`)) return;
     setBusyOrder(order.id);
     try {
-      await updateDoc(doc(db, "orders", order.id), { status: "cancelled", cancelledAt: serverTimestamp() });
+      const response = await fetch("/api/order-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", authorization: `Bearer ${await user.getIdToken()}` },
+        body: JSON.stringify({ orderId: order.id, action: "cancelled" }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Cancellation failed");
       setOrders((current) => current.map((item) => item.id === order.id ? { ...item, status: "cancelled" } : item));
     } catch {
-      setError("This order could not be cancelled. It may already be processing or the updated rules still need to be published.");
+      setError("This order could not be cancelled. It may already be processing.");
     } finally {
       setBusyOrder("");
     }

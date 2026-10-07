@@ -1,3 +1,5 @@
+import { enforceRateLimit } from "../lib/rate-limit.js";
+
 const ADMIN_EMAIL = "cchughiefe@gmail.com";
 
 async function authenticateAdmin(request) {
@@ -25,6 +27,7 @@ export default async function handler(request, response) {
   if (request.method !== "POST") return response.status(405).json({ error:"Method not allowed" });
   try {
     await authenticateAdmin(request);
+    await enforceRateLimit(`product-ai:${request.headers["x-forwarded-for"] || "admin"}`, 20, 60 * 60 * 1000);
     const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) throw new Error("GROQ_API_KEY is not configured in Vercel");
     const image = request.body?.image;
@@ -34,6 +37,8 @@ export default async function handler(request, response) {
     const match = image.match(/^data:(image\/(?:jpeg|png|webp));base64,(.+)$/);
     if (!match) return response.status(400).json({ error:"The selected image format is not supported" });
     const model = process.env.GROQ_PRODUCT_MODEL || "qwen/qwen3.8-27b";
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 25000);
     const aiResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method:"POST",
       headers:{ authorization:`Bearer ${apiKey}`, "content-type":"application/json" },
@@ -48,7 +53,9 @@ export default async function handler(request, response) {
         temperature:0.2,
         max_completion_tokens:500,
       }),
+      signal:controller.signal,
     });
+    clearTimeout(timeout);
     const data = await aiResponse.json();
     if (!aiResponse.ok) {
       if (aiResponse.status === 429) throw new Error("The free AI limit is temporarily busy. Please wait a minute and try again.");
@@ -62,6 +69,7 @@ export default async function handler(request, response) {
     });
   } catch (error) {
     const status = /access|required|sign-in/i.test(error.message) ? 401 : /not configured/i.test(error.message) ? 503 : 500;
-    return response.status(status).json({ error:error.message || "Could not analyse this product" });
+    const message = error.name === "AbortError" ? "The free AI took too long. Please try again." : error.message;
+    return response.status(status).json({ error:message || "Could not analyse this product" });
   }
 }

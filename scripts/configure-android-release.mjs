@@ -2,7 +2,7 @@ import fs from "node:fs";
 
 const buildFile = "android/app/build.gradle";
 const packageInfo = JSON.parse(fs.readFileSync("package.json", "utf8"));
-const versionName = process.env.APP_VERSION_NAME || packageInfo.version || "1.0.0";
+const versionName = String(process.env.APP_VERSION_NAME || packageInfo.version || "1.0.0").replace(/^v/, "");
 const numbers = versionName.split(".").map((value) => Number.parseInt(value, 10) || 0);
 const versionCode = Number(process.env.APP_VERSION_CODE) || ((numbers[0] || 1) * 10000 + (numbers[1] || 0) * 100 + (numbers[2] || 0));
 

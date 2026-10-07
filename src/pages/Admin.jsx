@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import {
-  collection, getDoc, getDocs, addDoc, setDoc, updateDoc, deleteDoc, doc, serverTimestamp, increment
+  collection, getDoc, getDocs, addDoc, setDoc, updateDoc, deleteDoc, doc, serverTimestamp
 } from "firebase/firestore";
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { db, auth } from "../firebase";
@@ -149,11 +149,22 @@ function ProductForm({ initial, onSave, onCancel }) {
 
   const analyseImage = async () => {
     if (!imgFile) { setErr("Choose a product image first."); return; }
-    if (imgFile.size > 6 * 1024 * 1024) { setErr("Please choose an image smaller than 6MB."); return; }
+    if (imgFile.size > 12 * 1024 * 1024) { setErr("Please choose an image smaller than 12MB."); return; }
     setAnalysing(true); setErr(""); setAiResult(null);
     try {
       const image = await new Promise((resolve, reject) => {
-        const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(imgFile);
+        const source = new Image();
+        source.onload = () => {
+          const scale = Math.min(1, 1400 / Math.max(source.width, source.height));
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.max(1, Math.round(source.width * scale));
+          canvas.height = Math.max(1, Math.round(source.height * scale));
+          canvas.getContext("2d").drawImage(source, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL("image/jpeg", 0.82));
+          URL.revokeObjectURL(source.src);
+        };
+        source.onerror = reject;
+        source.src = URL.createObjectURL(imgFile);
       });
       const token = await auth.currentUser?.getIdToken();
       const response = await fetch("/api/product-ai", { method:"POST", headers:{ "content-type":"application/json", authorization:`Bearer ${token}` }, body:JSON.stringify({ image }) });
@@ -181,6 +192,10 @@ function ProductForm({ initial, onSave, onCancel }) {
 
   const handleSave = async () => {
     if (!form.name.trim() || !form.sellingPrice) { setErr("Name and Selling Price are required."); return; }
+    const sellingPrice = Number(form.sellingPrice), costPrice = Number(form.costPrice || 0), deliveryCost = Number(form.deliveryCost || 0), stock = Number(form.availableQuantity || 0);
+    if (!Number.isFinite(sellingPrice) || sellingPrice <= 0 || !Number.isFinite(costPrice) || costPrice < 0 || !Number.isFinite(deliveryCost) || deliveryCost < 0 || !Number.isInteger(stock) || stock < 0) {
+      setErr("Enter a positive selling price and valid non-negative costs and whole-number stock."); return;
+    }
     setSaving(true); setErr("");
     try {
       const imageUrl = await uploadImage();
@@ -188,13 +203,10 @@ function ProductForm({ initial, onSave, onCancel }) {
         name: form.name.trim(),
         description: form.description.trim(),
         category: form.category.trim() || "Accessories",
-        active: true,
+        active: initial?.active !== false,
         imageUrl,
         featured: form.featured,
-        sellingPrice: Number(form.sellingPrice),
-        costPrice: Number(form.costPrice || 0),
-        deliveryCost: Number(form.deliveryCost || 0),
-        availableQuantity: Number(form.availableQuantity || 0),
+        sellingPrice, costPrice, deliveryCost, availableQuantity: stock,
       });
     } catch (e) { setErr("Save failed: " + e.message); }
     setSaving(false);
@@ -440,19 +452,13 @@ export default function Admin() {
         order.status === "pending" ? "confirmed" :
         order.status === "confirmed" ? "processing" :
         order.status === "processing" ? "shipped" : "delivered";
-      await updateDoc(doc(db, "orders", order.docId), {
-        status:next,
-        paymentStatus: order.paymentMethod === "transfer" && next === "confirmed" ? "verified" : (order.paymentStatus || "pay_on_delivery")
+      const response = await fetch("/api/order-status", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json", authorization:`Bearer ${await auth.currentUser.getIdToken()}` },
+        body:JSON.stringify({ orderId:order.docId, action:next === "cancelled" ? "cancelled" : "advance" }),
       });
-      if (order.orderRef) await updateDoc(doc(db, "publicOrders", order.orderRef), {
-        status:next, updatedAt:serverTimestamp()
-      });
-      if (next === "delivered") {
-        const items = order.items || [{ productId:order.productId, quantity:order.quantity }];
-        for (const item of items) await updateDoc(doc(db, "products", item.productId), {
-          availableQuantity: increment(-Number(item.quantity || 1)),
-        });
-      }
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Action failed");
       await loadData();
     } catch (e) { alert("Action failed: " + e.message); }
   };

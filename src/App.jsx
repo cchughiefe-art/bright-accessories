@@ -1,13 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  addDoc,
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  serverTimestamp,
-  setDoc,
-} from "firebase/firestore";
+import { collection, doc, getDoc, getDocs } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "./firebase";
 
@@ -396,23 +388,38 @@ function Checkout({ cart, back, complete, settings }) {
     setBusy(true);
     setError("");
     try {
-      const orderRef = `BA-${crypto.randomUUID().replaceAll("-", "").slice(0, 10).toUpperCase()}`;
+      const uploadRef = `BA-${crypto.randomUUID().replaceAll("-", "").slice(0, 10).toUpperCase()}`;
       let receiptUrl = "";
       if (receipt) {
         if (!receipt.type.startsWith("image/") || receipt.size > 4194304)
           throw Error("Receipt must be an image under 4MB.");
-        receiptUrl = await uploadReceipt(receipt, orderRef);
+        receiptUrl = await uploadReceipt(receipt, uploadRef);
       }
-      const order = {
-        orderRef,
-        userId: currentUser.uid,
-        items: cart.map((i) => ({
-          productId: i.id,
-          name: i.name,
-          imageUrl: i.imageUrl || "",
-          price: Number(i.sellingPrice),
-          quantity: i.quantity,
-        })),
+      const response = await fetch("/api/create-order", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          authorization: `Bearer ${await currentUser.getIdToken()}`,
+        },
+        body: JSON.stringify({
+          items: cart.map((i) => ({ productId: i.id, quantity: i.quantity })),
+          customer: {
+            name: form.name.trim(),
+            phone: form.phone.trim(),
+            email: currentUser.email || form.email.trim(),
+            address: form.address.trim(),
+            state: form.state.trim(),
+            zone: form.zone,
+          },
+          paymentMethod: form.payment,
+          receiptUrl,
+          notes: form.notes.trim(),
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw Error(data.error || "We could not place the order.");
+      complete({
+        ...data.order,
         customer: {
           name: form.name.trim(),
           phone: form.phone.trim(),
@@ -421,32 +428,7 @@ function Checkout({ cart, back, complete, settings }) {
           state: form.state.trim(),
           zone: form.zone,
         },
-        paymentMethod: form.payment,
-        paymentStatus:
-          form.payment === "transfer"
-            ? "awaiting_verification"
-            : "pay_on_delivery",
-        receiptUrl,
-        subtotal,
-        deliveryFee: delivery,
-        total,
-        notes: form.notes.trim(),
-        status: "pending",
-        createdAt: serverTimestamp(),
-      };
-      await addDoc(collection(db, "orders"), order);
-      await setDoc(doc(db, "publicOrders", orderRef), {
-        orderRef,
-        phoneLast7: form.phone.replace(/\s/g, "").slice(-7),
-        status: "pending",
-        updatedAt: serverTimestamp(),
       });
-      fetch("/api/order-alert", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", authorization: `Bearer ${await currentUser.getIdToken()}` },
-        body: JSON.stringify(order),
-      }).catch(() => {});
-      complete(order);
     } catch (e) {
       setError(e.message || "We could not place the order. Try again.");
     } finally {
@@ -625,13 +607,13 @@ function Tracker({ close }) {
     setBusy(true);
     setError("");
     try {
-      const snap = await getDoc(
-        doc(db, "publicOrders", orderRef.trim().toUpperCase()),
-      );
-      if (!snap.exists()) throw Error("Order not found. Check the reference.");
-      const data = snap.data();
-      if (data.phoneLast7 !== phone.replace(/\s/g, "").slice(-7))
-        throw Error("Phone number does not match this order.");
+      const response = await fetch("/api/track-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderRef, phone }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw Error(data.error || "Order not found.");
       setResult(data);
     } catch (e) {
       setError(e.message);
@@ -865,6 +847,7 @@ export default function App() {
             Shop
           </a>
           <a href="/account">My account</a>
+          <a href="/download">Get the app</a>
           <a href="/admin">Admin login</a>
           <button
             onClick={() => {
@@ -1054,6 +1037,7 @@ export default function App() {
           <a href="#shop">Shop</a>
           <button onClick={() => setTracking(true)}>Track an order</button>
           <a href={`https://wa.me/${settings.whatsapp || "234"}`}>Support</a>
+          <a href="/download">Get the app</a>
           <a href="/admin">Admin login</a>
         </nav>
         <small>© {new Date().getFullYear()} Bright Accessories</small>
