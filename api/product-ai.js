@@ -21,6 +21,26 @@ function extractJson(value = "") {
   return JSON.parse(cleaned.slice(start, end + 1));
 }
 
+function findSuggestion(value) {
+  const texts = [];
+  const visit = (node) => {
+    if (!node) return;
+    if (typeof node === "string") { texts.push(node); return; }
+    if (Array.isArray(node)) { node.forEach(visit); return; }
+    if (typeof node === "object") {
+      for (const [key, child] of Object.entries(node)) {
+        if (["text", "output_text"].includes(key) && typeof child === "string") texts.unshift(child);
+        else if (!["input", "model"].includes(key)) visit(child);
+      }
+    }
+  };
+  visit(value?.output ?? value?.candidates ?? value);
+  for (const text of texts) {
+    try { return extractJson(text); } catch { /* try the next Gemini content block */ }
+  }
+  throw new Error("Gemini could not produce a product draft. Try a clearer product image.");
+}
+
 export default async function handler(request, response) {
   if (request.method !== "POST") return response.status(405).json({ error:"Method not allowed" });
   try {
@@ -34,21 +54,20 @@ export default async function handler(request, response) {
     const match = image.match(/^data:(image\/(?:jpeg|png|webp));base64,(.+)$/);
     if (!match) return response.status(400).json({ error:"The selected image format is not supported" });
     const model = process.env.GEMINI_PRODUCT_MODEL || "gemini-3.8-flash";
-    const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+    const aiResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
       method:"POST",
       headers:{ "x-goog-api-key":apiKey, "content-type":"application/json" },
       body:JSON.stringify({
-        contents:[{ role:"user", parts:[
-          { inline_data:{ mime_type:match[1], data:match[2] } },
-          { text:"You are a catalogue assistant for Bright Accessories, a Nigerian phone and electronics accessories shop. Inspect the product image. Return JSON only with: name (clear sales-ready product name), category (one of Audio, Chargers, Cables, Power Banks, Phone Cases, Smart Watches, Storage, Other), description (2 concise persuasive sentences, no unsupported specifications), confidence (integer 0-100), and notes (short warning about anything the seller should verify). Never invent brand, model compatibility, capacity, wattage, or technical specifications that are not clearly visible." },
-        ]}],
-        generationConfig:{ responseMimeType:"application/json", temperature:0.25, maxOutputTokens:500 },
+        model,
+        input:[
+          { type:"text", text:"You are a catalogue assistant for Bright Accessories, a Nigerian phone and electronics accessories shop. Inspect the attached product image. Respond with one valid JSON object only, with these keys: name, category, description, confidence, notes. Category must be one of Audio, Chargers, Cables, Power Banks, Phone Cases, Smart Watches, Storage, Other. Description must be two concise persuasive sentences. Confidence must be an integer from 0 to 100. Never invent a brand, model compatibility, capacity, wattage, or technical specification that is not clearly visible." },
+          { type:"image", data:match[2], mime_type:match[1] },
+        ],
       }),
     });
     const data = await aiResponse.json();
     if (!aiResponse.ok) throw new Error(data.error?.message || "Gemini analysis failed");
-    const text = data.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("");
-    const suggestion = extractJson(text);
+    const suggestion = findSuggestion(data);
     return response.status(200).json({
       name:String(suggestion.name || "").slice(0,100), category:String(suggestion.category || "Other").slice(0,50),
       description:String(suggestion.description || "").slice(0,700), confidence:Math.max(0,Math.min(100,Number(suggestion.confidence)||0)),
