@@ -262,48 +262,33 @@ function OrderCard({ o, onAction, fmt }) {
   const active = ["pending", "confirmed", "processing", "shipped"].includes(o.status);
   const nextLabel = o.status === "pending" ? "Confirm Order" : o.status === "confirmed" ? "Start Processing" : o.status === "processing" ? "Mark Shipped" : "Mark Delivered";
   return (
-    <div className="card" style={{ marginBottom:14, padding:16 }}>
-      <div style={{ display:"flex", gap:12, marginBottom:12 }}>
+    <article className="v2-order-card">
+      <div className="v2-order-head">
         {items[0]?.imageUrl ? (
-          <img src={items[0].imageUrl} alt="" loading="lazy"
-            style={{ width:56, height:56, objectFit:"cover", borderRadius:8, flexShrink:0 }} />
+          <img src={items[0].imageUrl} alt="" loading="lazy" />
         ) : (
-          <div style={{ width:56, height:56, background:"#f0ece8", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", fontSize:24, flexShrink:0 }}>📱</div>
+          <div className="v2-order-placeholder">📱</div>
         )}
-        <div style={{ flex:1 }}>
-          <p style={{ fontWeight:700, fontSize:15 }}>{o.orderRef || items[0]?.name}</p>
-          <p style={{ fontSize:13, color:"#555" }}>{items.map(i => i.name + " × " + i.quantity).join(", ")}</p>
-          <p style={{ color:"var(--gold)", fontWeight:700, fontSize:16 }}>Total: {fmt(o.total)}</p>
+        <div className="v2-order-title">
+          <span>{o.orderRef || "ORDER"}</span>
+          <h3>{customer.name || "Customer order"}</h3>
+          <p>{items.map(i => i.name + " × " + i.quantity).join(", ")}</p>
         </div>
+        <div className="v2-order-total"><small>Total</small><strong>{fmt(o.total)}</strong><span className={`v2-status ${o.status || "pending"}`}>{o.status || "pending"}</span></div>
       </div>
-      <div style={{ background:"#f9f5f0", borderRadius:8, padding:"10px 12px", fontSize:13, color:"#444", lineHeight:1.8, marginBottom:14 }}>
-        <p>Name: {customer.name}</p>
-        <p>Phone: {customer.phone}</p>
-        <p>Address: {customer.address}</p>
-        <p>Payment: {o.paymentMethod === "transfer" ? "Bank transfer" : "Cash on delivery"} · {o.paymentStatus || "pending"}</p>
-        {o.receiptUrl && <p><a href={o.receiptUrl} target="_blank" rel="noreferrer" style={{color:"var(--gold)",fontWeight:700}}>View receipt</a></p>}
-        {o.notes && <p>Notes: {o.notes}</p>}
+      <div className="v2-order-details">
+        <div><small>PHONE</small><b>{customer.phone || "Not provided"}</b></div>
+        <div><small>PAYMENT</small><b>{o.paymentMethod === "transfer" ? "Bank transfer" : "Cash on delivery"}</b></div>
+        <div className="address"><small>DELIVERY ADDRESS</small><b>{customer.address || "Not provided"}</b></div>
+        {o.receiptUrl && <a href={o.receiptUrl} target="_blank" rel="noreferrer">View payment receipt ↗</a>}
       </div>
       {active && (
-        <div style={{ display:"flex", gap:10 }}>
-          <button onClick={() => onAction(o, "cancelled")}
-            style={{ flex:1, padding:"10px 0", border:"1.5px solid var(--red)", background:"transparent", color:"var(--red)", borderRadius:8, fontWeight:600, fontSize:14, cursor:"pointer" }}>
-            Cancel
-          </button>
-          <button onClick={() => onAction(o, "advance")}
-            style={{ flex:2, padding:"10px 0", border:"none", background:"var(--green)", color:"white", borderRadius:8, fontWeight:600, fontSize:14, cursor:"pointer" }}>
-            {nextLabel}
-          </button>
+        <div className="v2-order-actions">
+          <button className="danger" onClick={() => onAction(o, "cancelled")}>Cancel order</button>
+          <button className="primary" onClick={() => onAction(o, "advance")}>{nextLabel} →</button>
         </div>
       )}
-      {!active && (
-        <span style={{
-          fontSize:12, fontWeight:600, padding:"4px 12px", borderRadius:20,
-          background: ["successful","delivered"].includes(o.status) ? "#D1FAE5" : "#FEE2E2",
-          color: ["successful","delivered"].includes(o.status) ? "var(--green)" : "var(--red)"
-        }}>{o.status}</span>
-      )}
-    </div>
+    </article>
   );
 }
 
@@ -518,7 +503,7 @@ export default function Admin() {
   ];
 
   return (
-    <div className="admin-shell">
+    <div className="admin-shell admin-v2">
       <aside className="admin-sidebar">
         <div className="admin-logo"><span className="admin-logo-mark">B</span><div><strong>Bright Admin</strong><small>Store management</small></div></div>
         <nav className="admin-nav">{tabs.map(t=><button key={t.id} className={tab===t.id?"active":""} onClick={()=>setTab(t.id)}><AdminIcon name={t.icon}/><span>{t.label}</span>{t.count>0&&<b>{t.count}</b>}</button>)}</nav>
@@ -537,13 +522,13 @@ export default function Admin() {
         ) : tab === "orders" ? (
           <>
             <div className="admin-page-heading"><div><span>FULFILMENT</span><h2>Customer orders</h2><p>Review payments and move orders through delivery.</p></div><button className="btn-outline" onClick={exportOrders}>Export CSV</button></div>
-            <div style={{ marginBottom:16 }}>
+            <div className="v2-searchbar">
               <input className="input-field" placeholder="Search by name, phone or product..."
                 value={orderSearch} onChange={(e) => setOrderSearch(e.target.value)} />
             </div>
             {filteredOrders ? (
               <>
-                <h2 style={{ marginBottom:14, fontSize:16 }}>Results ({filteredOrders.length})</h2>
+                <h2 className="v2-section-heading">Search results <span>{filteredOrders.length}</span></h2>
                 {filteredOrders.length === 0 ? (
                   <p style={{ color:"#888", textAlign:"center", padding:20 }}>No orders found</p>
                 ) : filteredOrders.map((o) => (
@@ -552,7 +537,7 @@ export default function Admin() {
               </>
             ) : (
               <>
-                <h2 style={{ marginBottom:14, fontSize:18 }}>Pending Orders ({pendingOrders.length})</h2>
+                <h2 className="v2-section-heading">Needs attention <span>{pendingOrders.length}</span></h2>
                 {pendingOrders.length === 0 ? (
                   <div style={{ textAlign:"center", padding:40, color:"#888" }}><p>No pending orders</p></div>
                 ) : pendingOrders.map((o) => (
@@ -560,16 +545,8 @@ export default function Admin() {
                 ))}
                 {pastOrders.length > 0 && (
                   <>
-                    <h2 style={{ margin:"24px 0 12px", fontSize:16, color:"#888" }}>Past Orders ({pastOrders.length})</h2>
-                    {pastOrders.map((o) => (
-                      <div key={o.docId} style={{ background:"white", borderRadius:12, padding:14, marginBottom:10, border:"1px solid var(--border)" }}>
-                        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
-                          <span style={{ fontSize:14, fontWeight:600 }}>{o.orderRef || o.productName || o.items?.map(i=>i.name).join(", ")}</span>
-                          <span style={{fontSize:12,fontWeight:600,padding:"3px 10px",borderRadius:20,background:o.status==="successful"?"#D1FAE5":"#FEE2E2",color:o.status==="successful"?"var(--green)":"var(--red)"}}>{o.status}</span>
-                        </div>
-                        <p style={{ fontSize:13, color:"#666" }}>{o.customerName || o.customer?.name} - {o.customerPhone || o.customer?.phone}</p><p style={{ fontSize:13, color:"var(--gold)", fontWeight:600 }}>{fmt(o.total)}</p>
-                      </div>
-                    ))}
+                    <h2 className="v2-section-heading past">Order history <span>{pastOrders.length}</span></h2>
+                    {pastOrders.map((o) => <OrderCard key={o.docId} o={o} onAction={handleOrderAction} fmt={fmt} />)}
                   </>
                 )}
               </>
@@ -580,16 +557,14 @@ export default function Admin() {
         ) : (
           <>
             <div className="admin-page-heading"><div><span>CATALOGUE</span><h2>Products</h2><p>Manage inventory, pricing and product photos.</p></div></div>
-            <div style={{ display:"flex", justifyContent:"flex-end", alignItems:"center", gap:10, marginBottom:14, flexWrap:"wrap" }}>
-              <div style={{display:"flex",gap:8}}>
-                <button className="btn-outline" style={{ padding:"10px 14px", fontSize:13 }} disabled={migration.running} onClick={migrateImgBbImages}>{migration.running ? `Moving ${migration.done}/${migration.total}…` : `Move ImgBB images (${products.filter((p) => isImgBbUrl(p.imageUrl)).length})`}</button>
-                <button className="btn-gold" style={{ padding:"10px 18px", fontSize:14 }} onClick={() => { setEditing(null); setShowForm(true); }}>+ Add product</button>
-              </div>
+            <div className="v2-catalogue-tools">
+              <button className="v2-secondary" disabled={migration.running} onClick={migrateImgBbImages}>{migration.running ? `Moving ${migration.done}/${migration.total}…` : `Move legacy images · ${products.filter((p) => isImgBbUrl(p.imageUrl)).length}`}</button>
+              <button className="v2-primary" onClick={() => { setEditing(null); setShowForm(true); }}>＋ Add new product</button>
             </div>
             {migration.error && <div style={{background:migration.error.startsWith("Stopped")?"#FEE2E2":"#D1FAE5",color:migration.error.startsWith("Stopped")?"var(--red)":"var(--green)",padding:12,borderRadius:9,marginBottom:14,fontSize:13}}>{migration.error}</div>}
             {showForm && (
               <div className="overlay" onClick={() => { setShowForm(false); setEditing(null); }}>
-                <div style={{ width:"100%", maxWidth:480, maxHeight:"90vh", overflowY:"auto" }}
+                <div className="v2-product-modal"
                   onClick={(e) => e.stopPropagation()}>
                   <ProductForm initial={editing} onSave={handleSaveProduct}
                     onCancel={() => { setShowForm(false); setEditing(null); }} />
@@ -619,37 +594,20 @@ export default function Admin() {
                 <div style={{ fontSize:32, marginBottom:8 }}>📦</div>
                 <p>No products yet. Add your first product!</p>
               </div>
-            ) : products.map((p) => (
-              <div key={p.docId} className="card" style={{ marginBottom:14, padding:14 }}>
-                <div style={{ display:"flex", gap:12, alignItems:"center" }}>
+            ) : <div className="v2-product-grid">{products.map((p) => (
+              <article key={p.docId} className="v2-product-card">
+                <div className="v2-product-photo">
                   {p.imageUrl ? (
-                    <img src={p.imageUrl} alt="" loading="lazy"
-                      style={{ width:70, height:70, objectFit:"cover", borderRadius:8, flexShrink:0 }} />
+                    <img src={p.imageUrl} alt={p.name} loading="lazy" />
                   ) : (
-                    <div style={{ width:70, height:70, background:"#f0ece8", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", fontSize:28, flexShrink:0 }}>📱</div>
+                    <div className="v2-no-photo">📱</div>
                   )}
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:2 }}>
-                      <p style={{ fontWeight:700, fontSize:15 }}>{p.name}</p>
-                      {p.featured && <span style={{ background:"var(--gold)", color:"white", fontSize:10, padding:"2px 6px", borderRadius:10 }}>FEATURED</span>}
-                    </div>
-                    <p style={{ fontSize:13, color:"var(--gold)", fontWeight:600 }}>{fmt(p.sellingPrice)}</p>
-                    <p style={{ fontSize:12, color: p.availableQuantity < 5 ? "var(--orange)" : "#777" }}>
-                      Stock: {p.availableQuantity}
-                      {p.availableQuantity <= 0 ? " - Out of stock" : p.availableQuantity < 5 ? " - Low!" : ""}
-                    </p>
-                  </div>
-                  <div style={{ display:"flex", flexDirection:"column", gap:8, flexShrink:0 }}>
-                    <button className="btn-gold" style={{ fontSize:13, padding:"8px 16px" }}
-                      onClick={() => { setEditing(p); setShowForm(true); }}>Edit</button>
-                    <button onClick={() => setConfirmDelete(p)}
-                      style={{ fontSize:13, padding:"8px 16px", border:"1.5px solid var(--red)", background:"transparent", color:"var(--red)", borderRadius:8, fontWeight:600, cursor:"pointer" }}>
-                      Delete
-                    </button>
-                  </div>
+                  {p.featured && <span className="v2-featured">Featured</span>}
                 </div>
-              </div>
-            ))}
+                <div className="v2-product-copy"><small>{p.category || "Accessories"}</small><h3>{p.name}</h3><strong>{fmt(p.sellingPrice)}</strong><p className={p.availableQuantity <= 0 ? "out" : p.availableQuantity < 5 ? "low" : ""}>{p.availableQuantity <= 0 ? "Out of stock" : `${p.availableQuantity} units in stock`}</p></div>
+                <div className="v2-product-actions"><button onClick={() => { setEditing(p); setShowForm(true); }}>Edit</button><button onClick={() => setConfirmDelete(p)}>Delete</button></div>
+              </article>
+            ))}</div>}
           </>
         )}
         </div>
