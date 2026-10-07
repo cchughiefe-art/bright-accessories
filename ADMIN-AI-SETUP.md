@@ -12,7 +12,7 @@ In Vercel, open the Bright Accessories project, then go to **Settings → Enviro
 
 Redeploy the latest deployment after saving the variable.
 
-Create the free key at [Groq Console](https://console.groq.com/keys). You may optionally add `GROQ_PRODUCT_MODEL`. When omitted, the helper uses the vision-capable `meta-llama/llama-4-scout-17b-16e-instruct` model.
+Create the free key at [Groq Console](https://console.groq.com/keys). You may optionally add `GROQ_PRODUCT_MODEL`. When omitted, the helper uses the current vision-capable `qwen/qwen3.8-27b` model.
 
 ## How to use it
 

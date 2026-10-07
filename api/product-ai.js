@@ -33,7 +33,7 @@ export default async function handler(request, response) {
     }
     const match = image.match(/^data:(image\/(?:jpeg|png|webp));base64,(.+)$/);
     if (!match) return response.status(400).json({ error:"The selected image format is not supported" });
-    const model = process.env.GROQ_PRODUCT_MODEL || "meta-llama/llama-4-scout-17b-16e-instruct";
+    const model = process.env.GROQ_PRODUCT_MODEL || "qwen/qwen3.8-27b";
     const aiResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method:"POST",
       headers:{ authorization:`Bearer ${apiKey}`, "content-type":"application/json" },
@@ -44,6 +44,7 @@ export default async function handler(request, response) {
           { type:"image_url", image_url:{ url:image } },
         ]}],
         response_format:{ type:"json_object" },
+        reasoning_effort:"none",
         temperature:0.2,
         max_completion_tokens:500,
       }),
