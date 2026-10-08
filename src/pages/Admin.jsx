@@ -118,15 +118,15 @@ function Dashboard({ products, orders }) {
   );
 }
 
-const imageForAi = (file) => new Promise((resolve, reject) => {
+const imageForAi = (file, maxSize = 1400, quality = 0.8) => new Promise((resolve, reject) => {
   const source = new Image();
   source.onload = () => {
-    const scale = Math.min(1, 1400 / Math.max(source.width, source.height));
+    const scale = Math.min(1, maxSize / Math.max(source.width, source.height));
     const canvas = document.createElement("canvas");
     canvas.width = Math.max(1, Math.round(source.width * scale));
     canvas.height = Math.max(1, Math.round(source.height * scale));
     canvas.getContext("2d").drawImage(source, 0, 0, canvas.width, canvas.height);
-    resolve(canvas.toDataURL("image/jpeg", 0.8));
+    resolve(canvas.toDataURL("image/jpeg", quality));
     URL.revokeObjectURL(source.src);
   };
   source.onerror = reject;
@@ -145,16 +145,17 @@ function BulkProductImport({ onDone, onCancel }) {
     if (!items.length || running) return;
     setRunning(true); setMessage("");
     const token = await auth.currentUser.getIdToken();
-    for (const item of items) {
-      if (item.status === "ready" || item.status === "saved") continue;
-      update(item.id,{status:"analysing",error:""});
+    const pending = items.filter(item => !["ready","saved"].includes(item.status));
+    const groups = Array.from({length:Math.ceil(pending.length/5)},(_,index)=>pending.slice(index*5,index*5+5));
+    for (const group of groups) {
+      group.forEach(item=>update(item.id,{status:"analysing",error:""}));
       try {
-        const image = await imageForAi(item.file);
-        const response = await fetch("/api/product-ai",{method:"POST",headers:{"Content-Type":"application/json",authorization:`Bearer ${token}`},body:JSON.stringify({image})});
+        const images = await Promise.all(group.map(item=>imageForAi(item.file,900,0.68)));
+        const response = await fetch("/api/product-ai",{method:"POST",headers:{"Content-Type":"application/json",authorization:`Bearer ${token}`},body:JSON.stringify({images})});
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || "AI could not identify this product");
-        update(item.id,{status:"ready",name:data.name,category:data.category,description:data.description});
-      } catch(error) { update(item.id,{status:"error",error:error.message}); }
+        group.forEach((item,index)=>{const result=data.products?.find(product=>Number(product.index)===index)||data.products?.[index]; update(item.id,result?.name?{status:"ready",name:result.name,category:result.category,description:result.description}:{status:"error",error:"AI did not return a listing for this image"});});
+      } catch(error) { group.forEach(item=>update(item.id,{status:"error",error:error.message})); }
     }
     setRunning(false); setMessage("AI review finished. Check the drafts, then save them.");
   };
