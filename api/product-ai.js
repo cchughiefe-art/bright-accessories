@@ -27,7 +27,7 @@ export default async function handler(request, response) {
   if (request.method !== "POST") return response.status(405).json({ error:"Method not allowed" });
   try {
     await authenticateAdmin(request);
-    await enforceRateLimit(`product-ai:${request.headers["x-forwarded-for"] || "admin"}`, 20, 60 * 60 * 1000);
+    await enforceRateLimit(`product-ai:${request.headers["x-forwarded-for"] || "admin"}`, 60, 60 * 60 * 1000);
     const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) throw new Error("GROQ_API_KEY is not configured in Vercel");
     const image = request.body?.image;

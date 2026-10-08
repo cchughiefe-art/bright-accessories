@@ -118,6 +118,66 @@ function Dashboard({ products, orders }) {
   );
 }
 
+const imageForAi = (file) => new Promise((resolve, reject) => {
+  const source = new Image();
+  source.onload = () => {
+    const scale = Math.min(1, 1400 / Math.max(source.width, source.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(source.width * scale));
+    canvas.height = Math.max(1, Math.round(source.height * scale));
+    canvas.getContext("2d").drawImage(source, 0, 0, canvas.width, canvas.height);
+    resolve(canvas.toDataURL("image/jpeg", 0.8));
+    URL.revokeObjectURL(source.src);
+  };
+  source.onerror = reject;
+  source.src = URL.createObjectURL(file);
+});
+
+function BulkProductImport({ onDone, onCancel }) {
+  const [items, setItems] = useState([]), [running, setRunning] = useState(false), [saving, setSaving] = useState(false), [message, setMessage] = useState("");
+  const update = (id, patch) => setItems(current => current.map(item => item.id === id ? { ...item, ...patch } : item));
+  const chooseFiles = (event) => {
+    const files = [...event.target.files].filter(file => file.type.startsWith("image/")).slice(0, 30);
+    setItems(files.map((file,index)=>({id:`${file.name}-${file.lastModified}-${index}`,file,preview:URL.createObjectURL(file),status:"waiting",name:"",category:"",description:""})));
+    setMessage(files.length ? `${files.length} images ready for AI.` : "Choose JPG, PNG or WebP images.");
+  };
+  const analyseAll = async () => {
+    if (!items.length || running) return;
+    setRunning(true); setMessage("");
+    const token = await auth.currentUser.getIdToken();
+    for (const item of items) {
+      if (item.status === "ready" || item.status === "saved") continue;
+      update(item.id,{status:"analysing",error:""});
+      try {
+        const image = await imageForAi(item.file);
+        const response = await fetch("/api/product-ai",{method:"POST",headers:{"Content-Type":"application/json",authorization:`Bearer ${token}`},body:JSON.stringify({image})});
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "AI could not identify this product");
+        update(item.id,{status:"ready",name:data.name,category:data.category,description:data.description});
+      } catch(error) { update(item.id,{status:"error",error:error.message}); }
+    }
+    setRunning(false); setMessage("AI review finished. Check the drafts, then save them.");
+  };
+  const saveDrafts = async () => {
+    const ready = items.filter(item => item.status === "ready" && item.name.trim());
+    if (!ready.length) return setMessage("Analyse the images first.");
+    setSaving(true); setMessage(""); let saved = 0;
+    for (const item of ready) {
+      update(item.id,{status:"uploading"});
+      try {
+        const uploaded = await uploadToCloudinary(item.file,`${item.name}-${Date.now()}-${saved}`);
+        await addDoc(collection(db,"products"),{name:item.name.trim(),category:item.category.trim()||"Other",description:item.description.trim(),imageUrl:uploaded.secure_url,imagePublicId:uploaded.public_id||"",imageProvider:"cloudinary",sellingPrice:0,costPrice:0,deliveryCost:0,availableQuantity:0,featured:false,active:false,draft:true,createdAt:serverTimestamp()});
+        saved += 1; update(item.id,{status:"saved"});
+      } catch(error) { update(item.id,{status:"error",error:error.message}); }
+    }
+    setSaving(false); setMessage(`${saved} draft product${saved === 1 ? "" : "s"} saved. They stay hidden until you add price and stock.`);
+    if (saved === ready.length) window.setTimeout(onDone,900);
+  };
+  return <div className="bulk-import"><header><span>BULK AI IMPORT</span><h2>Create many product drafts</h2><p>Select up to 30 product photos. AI writes each listing one by one, then you can add prices and quantities later.</p></header>
+    {!items.length ? <label className="bulk-drop"><b>＋ Select product images</b><small>You can choose many photos at the same time</small><input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={chooseFiles}/></label> : <><div className="bulk-summary"><b>{items.length} images</b><span>{items.filter(i=>["ready","saved"].includes(i.status)).length} ready</span><label>Change selection<input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={chooseFiles}/></label></div><div className="bulk-grid">{items.map(item=><article key={item.id} className={`bulk-item ${item.status}`}><img src={item.preview} alt=""/><div><small>{item.status === "analysing" ? "AI is writing…" : item.status === "uploading" ? "Uploading…" : item.status === "saved" ? "Draft saved" : item.status === "error" ? "Needs retry" : item.status === "ready" ? "Ready" : "Waiting"}</small><input value={item.name} placeholder="Product name" onChange={e=>update(item.id,{name:e.target.value})}/><input value={item.category} placeholder="Category" onChange={e=>update(item.id,{category:e.target.value})}/><textarea value={item.description} placeholder="AI description" onChange={e=>update(item.id,{description:e.target.value})}/>{item.error&&<em>{item.error}</em>}</div><button type="button" aria-label="Remove image" onClick={()=>setItems(current=>current.filter(i=>i.id!==item.id))}>×</button></article>)}</div></>}
+    {message&&<p className="bulk-message">{message}</p>}<footer><button className="v2-secondary" onClick={onCancel} disabled={running||saving}>Close</button><button className="v2-secondary" onClick={analyseAll} disabled={!items.length||running||saving}>{running?`Writing ${items.filter(i=>i.status==="ready").length}/${items.length}…`:"✦ Write all with AI"}</button><button className="v2-primary" onClick={saveDrafts} disabled={running||saving||!items.some(i=>i.status==="ready")}>{saving?"Saving drafts…":"Save all drafts"}</button></footer></div>;
+}
+
 function ProductForm({ initial, onSave, onCancel }) {
   const [form, setForm] = useState({
     name: initial?.name || "",
@@ -152,20 +212,7 @@ function ProductForm({ initial, onSave, onCancel }) {
     if (imgFile.size > 12 * 1024 * 1024) { setErr("Please choose an image smaller than 12MB."); return; }
     setAnalysing(true); setErr(""); setAiResult(null);
     try {
-      const image = await new Promise((resolve, reject) => {
-        const source = new Image();
-        source.onload = () => {
-          const scale = Math.min(1, 1400 / Math.max(source.width, source.height));
-          const canvas = document.createElement("canvas");
-          canvas.width = Math.max(1, Math.round(source.width * scale));
-          canvas.height = Math.max(1, Math.round(source.height * scale));
-          canvas.getContext("2d").drawImage(source, 0, 0, canvas.width, canvas.height);
-          resolve(canvas.toDataURL("image/jpeg", 0.82));
-          URL.revokeObjectURL(source.src);
-        };
-        source.onerror = reject;
-        source.src = URL.createObjectURL(imgFile);
-      });
+      const image = await imageForAi(imgFile);
       const token = await auth.currentUser?.getIdToken();
       const response = await fetch("/api/product-ai", { method:"POST", headers:{ "content-type":"application/json", authorization:`Bearer ${token}` }, body:JSON.stringify({ image }) });
       const data = await response.json();
@@ -203,7 +250,8 @@ function ProductForm({ initial, onSave, onCancel }) {
         name: form.name.trim(),
         description: form.description.trim(),
         category: form.category.trim() || "Accessories",
-        active: initial?.active !== false,
+        active: true,
+        draft: false,
         imageUrl,
         featured: form.featured,
         sellingPrice, costPrice, deliveryCost, availableQuantity: stock,
@@ -368,6 +416,7 @@ export default function Admin() {
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
   const [showForm, setShowForm] = useState(false);
+  const [showBulk, setShowBulk] = useState(false);
   const [editing, setEditing] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -565,6 +614,7 @@ export default function Admin() {
             <div className="admin-page-heading"><div><span>CATALOGUE</span><h2>Products</h2><p>Manage inventory, pricing and product photos.</p></div></div>
             <div className="v2-catalogue-tools">
               <button className="v2-secondary" disabled={migration.running} onClick={migrateImgBbImages}>{migration.running ? `Moving ${migration.done}/${migration.total}…` : `Move legacy images · ${products.filter((p) => isImgBbUrl(p.imageUrl)).length}`}</button>
+              <button className="v2-secondary" onClick={() => setShowBulk(true)}>✦ Bulk AI import</button>
               <button className="v2-primary" onClick={() => { setEditing(null); setShowForm(true); }}>＋ Add new product</button>
             </div>
             {migration.error && <div style={{background:migration.error.startsWith("Stopped")?"#FEE2E2":"#D1FAE5",color:migration.error.startsWith("Stopped")?"var(--red)":"var(--green)",padding:12,borderRadius:9,marginBottom:14,fontSize:13}}>{migration.error}</div>}
@@ -577,6 +627,7 @@ export default function Admin() {
                 </div>
               </div>
             )}
+            {showBulk && <div className="overlay" onClick={() => setShowBulk(false)}><div className="bulk-modal" onClick={(event)=>event.stopPropagation()}><BulkProductImport onCancel={()=>setShowBulk(false)} onDone={async()=>{setShowBulk(false);await loadData();}}/></div></div>}
             {confirmDelete && (
               <div className="overlay" onClick={() => setConfirmDelete(null)}>
                 <div className="modal" onClick={(e) => e.stopPropagation()} style={{ textAlign:"center", maxWidth:340 }}>
@@ -609,8 +660,9 @@ export default function Admin() {
                     <div className="v2-no-photo">📱</div>
                   )}
                   {p.featured && <span className="v2-featured">Featured</span>}
+                  {p.draft && <span className="v2-draft">Draft</span>}
                 </div>
-                <div className="v2-product-copy"><small>{p.category || "Accessories"}</small><h3>{p.name}</h3><strong>{fmt(p.sellingPrice)}</strong><p className={p.availableQuantity <= 0 ? "out" : p.availableQuantity < 5 ? "low" : ""}>{p.availableQuantity <= 0 ? "Out of stock" : `${p.availableQuantity} units in stock`}</p></div>
+                <div className="v2-product-copy"><small>{p.category || "Accessories"}</small><h3>{p.name}</h3><strong>{p.draft ? "Price not set" : fmt(p.sellingPrice)}</strong><p className={p.draft ? "low" : p.availableQuantity <= 0 ? "out" : p.availableQuantity < 5 ? "low" : ""}>{p.draft ? "Hidden from store" : p.availableQuantity <= 0 ? "Out of stock" : `${p.availableQuantity} units in stock`}</p></div>
                 <div className="v2-product-actions"><button onClick={() => { setEditing(p); setShowForm(true); }}>Edit</button><button onClick={() => setConfirmDelete(p)}>Delete</button></div>
               </article>
             ))}</div>}
