@@ -1,12 +1,12 @@
 {
-  "latestVersion": "1.0.4",
+  "latestVersion": "1.0.5",
   "minimumVersion": "1.0.0",
   "required": false,
   "apkUrl": "https://github.com/cchughiefe-art/bright-accessories/releases/latest/download/bright-accessories.apk",
   "message": "A newer, improved version of Bright Accessories is ready.",
   "releaseNotes": [
-    "Faster and more reliable shopping",
-    "Improved customer accounts and order tracking",
-    "Bug fixes and security improvements"
+    "Custom opening animation on every fresh app launch",
+    "Bulk AI product descriptions with failed-only retry",
+    "Secure checkout, customer accounts and order tracking"
   ]
 }

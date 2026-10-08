@@ -15,7 +15,6 @@ const readProducts = () => {
 const mission = ["Above", "limitations"];
 const vision = ["Keep", "moving", "forward"];
 const fallbackProducts = ["Chargers", "Earphones", "Power banks", "Cables", "Cases"];
-const INTRO_KEY = "bright-intro-seen-1.0.4";
 
 function Words({ words }) {
   return words.map((word, index) => (
@@ -25,14 +24,13 @@ function Words({ words }) {
 
 export default function SplashIntro() {
   const [phase, setPhase] = useState(() =>
-    Capacitor.isNativePlatform() && !localStorage.getItem(INTRO_KEY) ? "show" : "done",
+    Capacitor.isNativePlatform() ? "show" : "done",
   );
   const [products, setProducts] = useState(readProducts);
 
   useEffect(() => {
     if (phase === "done") return undefined;
     if (phase === "exit") {
-      localStorage.setItem(INTRO_KEY, "1");
       const removeTimer = window.setTimeout(() => setPhase("done"), 650);
       return () => window.clearTimeout(removeTimer);
     }

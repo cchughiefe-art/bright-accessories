@@ -6,10 +6,20 @@ import { db } from "../firebase";
 import "./Download.css";
 
 const fallback = {
-  version: "1.0.0",
+  version: "1.0.5",
   apkUrl: "https://github.com/cchughiefe-art/bright-accessories/releases/latest/download/bright-accessories.apk",
   message: "The Bright Accessories Android app is ready.",
-  releaseNotes: ["Complete mobile shopping experience", "Customer accounts and order tracking", "Secure admin dashboard"],
+  releaseNotes: ["Custom opening animation on every fresh app launch", "Customer accounts and order tracking", "Bulk AI product management"],
+};
+
+const versionParts = (version = "0") => String(version).replace(/^v/, "").split(".").map(value => Number.parseInt(value,10) || 0);
+const newerVersion = (first, second) => {
+  const a = versionParts(first), b = versionParts(second);
+  for (let index=0; index<Math.max(a.length,b.length); index+=1) {
+    if ((a[index]||0) > (b[index]||0)) return first;
+    if ((a[index]||0) < (b[index]||0)) return second;
+  }
+  return first;
 };
 
 function Mark({ name }) {
@@ -42,11 +52,14 @@ export default function Download() {
     ]).then(([manifestResult, settingsResult]) => {
       const manifest = manifestResult.status === "fulfilled" ? manifestResult.value : null;
       const settings = settingsResult.status === "fulfilled" ? settingsResult.value : null;
+      const manifestVersion = manifest?.latestVersion || fallback.version;
+      const settingsVersion = settings?.apkLatestVersion || "0";
+      const settingsIsCurrent = settingsVersion !== "0" && newerVersion(settingsVersion, manifestVersion) === settingsVersion;
       setRelease({
-        version: settings?.apkLatestVersion || manifest?.latestVersion || fallback.version,
-        apkUrl: settings?.apkDownloadUrl || manifest?.apkUrl || fallback.apkUrl,
-        message: settings?.apkUpdateMessage || manifest?.message || fallback.message,
-        releaseNotes: String(settings?.apkReleaseNotes || "").split("\n").filter(Boolean).length
+        version: newerVersion(settingsVersion, manifestVersion),
+        apkUrl: settingsIsCurrent ? settings.apkDownloadUrl || manifest?.apkUrl || fallback.apkUrl : manifest?.apkUrl || fallback.apkUrl,
+        message: settingsIsCurrent ? settings.apkUpdateMessage || manifest?.message || fallback.message : manifest?.message || fallback.message,
+        releaseNotes: settingsIsCurrent && String(settings?.apkReleaseNotes || "").split("\n").filter(Boolean).length
           ? String(settings.apkReleaseNotes).split("\n").filter(Boolean)
           : manifest?.releaseNotes || fallback.releaseNotes,
       });
@@ -68,7 +81,7 @@ export default function Download() {
           <a className="download-button" href={release.apkUrl} onClick={downloadApk}><Mark name="download"/>Download APK</a>
           <small>Version {release.version} · Direct download</small>
         </div>
-        <div className="download-trust"><span><Mark name="shield"/>Securely signed</span><span><Mark name="update"/>Update alerts included</span></div>
+        <div className="download-trust"><span><Mark name="shield"/>Securely signed</span><span><Mark name="update"/>Update alerts included</span><span>Custom opening experience</span></div>
       </div>
       <div className="download-device" aria-label="Bright Accessories app preview">
         <div className="download-phone">
