@@ -145,7 +145,9 @@ function BulkProductImport({ onDone, onCancel }) {
     if (!items.length || running) return;
     setRunning(true); setMessage("");
     const token = await auth.currentUser.getIdToken();
-    const pending = items.filter(item => !["ready","saved"].includes(item.status));
+    const failed = items.filter(item => item.status === "error");
+    const pending = failed.length ? failed : items.filter(item => item.status === "waiting");
+    if (!pending.length) { setRunning(false); setMessage("Every generated listing is already ready or saved."); return; }
     const groups = Array.from({length:Math.ceil(pending.length/5)},(_,index)=>pending.slice(index*5,index*5+5));
     for (const group of groups) {
       group.forEach(item=>update(item.id,{status:"analysing",error:""}));
@@ -154,10 +156,10 @@ function BulkProductImport({ onDone, onCancel }) {
         const response = await fetch("/api/product-ai",{method:"POST",headers:{"Content-Type":"application/json",authorization:`Bearer ${token}`},body:JSON.stringify({images})});
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || "AI could not identify this product");
-        group.forEach((item,index)=>{const result=data.products?.find(product=>Number(product.index)===index)||data.products?.[index]; update(item.id,result?.name?{status:"ready",name:result.name,category:result.category,description:result.description}:{status:"error",error:"AI did not return a listing for this image"});});
+        group.forEach((item,index)=>{const result=data.products?.find(product=>Number(product.index)===index)||data.products?.[index]; update(item.id,result?.name&&result?.description?{status:"ready",name:result.name,category:result.category,description:result.description,error:""}:{status:"error",error:"AI did not return a complete name and description for this image"});});
       } catch(error) { group.forEach(item=>update(item.id,{status:"error",error:error.message})); }
     }
-    setRunning(false); setMessage("AI review finished. Check the drafts, then save them.");
+    setRunning(false); setMessage(failed.length ? "Failed products were retried. Successful descriptions were kept unchanged." : "AI review finished. Check the generated descriptions, then save the drafts.");
   };
   const saveDrafts = async () => {
     const ready = items.filter(item => item.status === "ready" && item.name.trim());
@@ -176,7 +178,7 @@ function BulkProductImport({ onDone, onCancel }) {
   };
   return <div className="bulk-import"><header><span>BULK AI IMPORT</span><h2>Create many product drafts</h2><p>Select up to 30 product photos. AI writes each listing one by one, then you can add prices and quantities later.</p></header>
     {!items.length ? <label className="bulk-drop"><b>＋ Select product images</b><small>You can choose many photos at the same time</small><input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={chooseFiles}/></label> : <><div className="bulk-summary"><b>{items.length} images</b><span>{items.filter(i=>["ready","saved"].includes(i.status)).length} ready</span><label>Change selection<input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={chooseFiles}/></label></div><div className="bulk-grid">{items.map(item=><article key={item.id} className={`bulk-item ${item.status}`}><img src={item.preview} alt=""/><div><small>{item.status === "analysing" ? "AI is writing…" : item.status === "uploading" ? "Uploading…" : item.status === "saved" ? "Draft saved" : item.status === "error" ? "Needs retry" : item.status === "ready" ? "Ready" : "Waiting"}</small><input value={item.name} placeholder="Product name" onChange={e=>update(item.id,{name:e.target.value})}/><input value={item.category} placeholder="Category" onChange={e=>update(item.id,{category:e.target.value})}/><textarea value={item.description} placeholder="AI description" onChange={e=>update(item.id,{description:e.target.value})}/>{item.error&&<em>{item.error}</em>}</div><button type="button" aria-label="Remove image" onClick={()=>setItems(current=>current.filter(i=>i.id!==item.id))}>×</button></article>)}</div></>}
-    {message&&<p className="bulk-message">{message}</p>}<footer><button className="v2-secondary" onClick={onCancel} disabled={running||saving}>Close</button><button className="v2-secondary" onClick={analyseAll} disabled={!items.length||running||saving}>{running?`Writing ${items.filter(i=>i.status==="ready").length}/${items.length}…`:"✦ Write all with AI"}</button><button className="v2-primary" onClick={saveDrafts} disabled={running||saving||!items.some(i=>i.status==="ready")}>{saving?"Saving drafts…":"Save all drafts"}</button></footer></div>;
+    {message&&<p className="bulk-message">{message}</p>}<footer><button className="v2-secondary" onClick={onCancel} disabled={running||saving}>Close</button><button className="v2-secondary" onClick={analyseAll} disabled={!items.length||running||saving}>{running?`Processing ${items.filter(i=>i.status==="analysing").length}…`:items.some(i=>i.status==="error")?`↻ Retry failed only (${items.filter(i=>i.status==="error").length})`:"✦ Write all with AI"}</button><button className="v2-primary" onClick={saveDrafts} disabled={running||saving||!items.some(i=>i.status==="ready")}>{saving?"Saving drafts…":"Save all drafts"}</button></footer></div>;
 }
 
 function ProductForm({ initial, onSave, onCancel }) {
